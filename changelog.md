@@ -1,3 +1,7 @@
+# 0.1.2 - Add: .astro and better .tsx file support
+- improved outputs for .tsx files
+- .astro files now show something useful
+
 # 0.1.1 - Update: ignore multiple .gitignore files
 - previously wasn't respecting multiple .gitignore files
 

@@ -107,7 +107,7 @@ func processFile(path string, info os.FileInfo, out *outline, fset *token.FileSe
 	}
 
 	// Check for supported file extensions
-	supportedExts := []string{".go", ".js", ".jsx", ".ts", ".tsx"}
+	supportedExts := []string{".go", ".js", ".jsx", ".ts", ".tsx", ".astro"}
 	supported := false
 	for _, ext := range supportedExts {
 		if strings.HasSuffix(path, ext) {
@@ -176,6 +176,9 @@ func processFile(path string, info os.FileInfo, out *outline, fset *token.FileSe
 			}
 			return true
 		})
+	} else if strings.HasSuffix(path, ".astro") {
+		// Handle Astro files with specialized parsing
+		parseAstroFile(path, out, fileInfo)
 	} else {
 		// Handle JavaScript/TypeScript files with regex parsing
 		parseJSFile(path, out, fileInfo)
@@ -193,7 +196,7 @@ func parseJSFile(path string, out *outline, fileInfo *fileInfo) {
 
 	scanner := bufio.NewScanner(file)
 
-	// Regex patterns for JavaScript/TypeScript constructs
+	// Enhanced regex patterns for JavaScript/TypeScript constructs
 	importRegex := regexp.MustCompile(`^\s*import\s+(.+?)\s+from\s+['\"](.*?)['\"]`)
 	exportRegex := regexp.MustCompile(`^\s*export\s+(?:default\s+)?(.+)`)
 	classRegex := regexp.MustCompile(`^\s*(?:export\s+)?(?:default\s+)?class\s+(\w+)`)
@@ -204,9 +207,20 @@ func parseJSFile(path string, out *outline, fileInfo *fileInfo) {
 	propertyRegex := regexp.MustCompile(`^\s*(\w+)\s*[:=]`)
 	constRegex := regexp.MustCompile(`^\s*(?:export\s+)?const\s+(\w+)\s*=`)
 
+	// NEW: Enhanced TypeScript patterns
+	interfaceRegex := regexp.MustCompile(`^\s*(?:export\s+)?interface\s+(\w+)`)
+	typeAliasRegex := regexp.MustCompile(`^\s*(?:export\s+)?type\s+(\w+)\s*=`)
+	enumRegex := regexp.MustCompile(`^\s*(?:export\s+)?enum\s+(\w+)`)
+	componentRegex := regexp.MustCompile(`^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*[:=]\s*(?:Component|FC|FunctionComponent)`)
+	hookRegex := regexp.MustCompile(`\b(use\w+)\s*\(`)
+	jsxComponentRegex := regexp.MustCompile(`<(\w+)`)
+
 	var currentClass string
+	var currentInterface string
 	var imports []string
 	var exports []string
+	var hooks []string
+	var jsxComponents []string
 
 	// Temporary variable patterns to filter out
 	tempVarPatterns := map[string]bool{
@@ -238,6 +252,31 @@ func parseJSFile(path string, out *outline, fileInfo *fileInfo) {
 		// Check for exports
 		if matches := exportRegex.FindStringSubmatch(line); matches != nil {
 			exports = append(exports, strings.TrimSpace(matches[1]))
+		}
+
+		// NEW: Check for TypeScript interfaces
+		if matches := interfaceRegex.FindStringSubmatch(line); matches != nil {
+			currentInterface = matches[1]
+			fileInfo.types = append(fileInfo.types, "interface "+currentInterface)
+			out.ensureType(currentInterface)
+		}
+
+		// NEW: Check for TypeScript type aliases
+		if matches := typeAliasRegex.FindStringSubmatch(line); matches != nil {
+			fileInfo.types = append(fileInfo.types, "type "+matches[1])
+			out.ensureType(matches[1])
+		}
+
+		// NEW: Check for TypeScript enums
+		if matches := enumRegex.FindStringSubmatch(line); matches != nil {
+			fileInfo.types = append(fileInfo.types, "enum "+matches[1])
+			out.ensureType(matches[1])
+		}
+
+		// NEW: Check for React/SolidJS components
+		if matches := componentRegex.FindStringSubmatch(line); matches != nil {
+			fileInfo.types = append(fileInfo.types, "component "+matches[1])
+			out.ensureType(matches[1])
 		}
 
 		// Check for class declarations
@@ -290,6 +329,13 @@ func parseJSFile(path string, out *outline, fileInfo *fileInfo) {
 			}
 		}
 
+		// NEW: Check for interface properties
+		if currentInterface != "" {
+			if matches := propertyRegex.FindStringSubmatch(line); matches != nil {
+				out.ensureType(currentInterface).fields = append(out.ensureType(currentInterface).fields, matches[1])
+			}
+		}
+
 		// Check for properties (inside classes)
 		if currentClass != "" {
 			if matches := propertyRegex.FindStringSubmatch(line); matches != nil {
@@ -297,8 +343,29 @@ func parseJSFile(path string, out *outline, fileInfo *fileInfo) {
 			}
 		}
 
+		// NEW: Check for React/SolidJS hooks
+		if matches := hookRegex.FindAllStringSubmatch(line, -1); matches != nil {
+			for _, match := range matches {
+				hookName := match[1]
+				if !contains(hooks, hookName) {
+					hooks = append(hooks, hookName)
+				}
+			}
+		}
+
+		// NEW: Check for JSX components usage
+		if matches := jsxComponentRegex.FindAllStringSubmatch(line, -1); matches != nil {
+			for _, match := range matches {
+				componentName := match[1]
+				// Filter out HTML tags (lowercase)
+				if componentName[0] >= 'A' && componentName[0] <= 'Z' && !contains(jsxComponents, componentName) {
+					jsxComponents = append(jsxComponents, componentName)
+				}
+			}
+		}
+
 		// Check for meaningful constants (filter out temporary variables)
-		if matches := constRegex.FindStringSubmatch(line); matches != nil && currentClass == "" {
+		if matches := constRegex.FindStringSubmatch(line); matches != nil && currentClass == "" && currentInterface == "" {
 			varName := matches[1]
 			// Only include if it's not a temporary variable pattern
 			if !tempVarPatterns[strings.ToLower(varName)] && len(varName) > 1 {
@@ -313,9 +380,14 @@ func parseJSFile(path string, out *outline, fileInfo *fileInfo) {
 			}
 		}
 
-		// Reset current class when we exit a class block
-		if strings.Contains(line, "}") && currentClass != "" {
-			currentClass = ""
+		// Reset current class/interface when we exit a block
+		if strings.Contains(line, "}") {
+			if currentClass != "" {
+				currentClass = ""
+			}
+			if currentInterface != "" {
+				currentInterface = ""
+			}
 		}
 	}
 
@@ -325,6 +397,13 @@ func parseJSFile(path string, out *outline, fileInfo *fileInfo) {
 	}
 	if len(exports) > 0 {
 		fileInfo.types = append(fileInfo.types, "EXPORTS: "+strings.Join(exports, ", "))
+	}
+	// NEW: Store hooks and JSX components
+	if len(hooks) > 0 {
+		fileInfo.types = append(fileInfo.types, "HOOKS: "+strings.Join(hooks, ", "))
+	}
+	if len(jsxComponents) > 0 {
+		fileInfo.types = append(fileInfo.types, "JSX_COMPONENTS: "+strings.Join(jsxComponents, ", "))
 	}
 }
 
@@ -799,4 +878,171 @@ func (gi *gitignore) matchPattern(path, pattern string) bool {
 
 	// Exact match or prefix match for directories
 	return path == pattern || strings.HasPrefix(path, pattern+"/")
+}
+
+// Helper function to check if a slice contains a string
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
+// Parse Astro files with specialized handling
+func parseAstroFile(path string, out *outline, fileInfo *fileInfo) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		log.Printf("read %s: %v", path, err)
+		return
+	}
+
+	fileContent := string(content)
+
+	// Split Astro file into frontmatter and template sections
+	frontmatterRegex := regexp.MustCompile(`(?s)^---\s*\n(.*?)\n---`)
+	matches := frontmatterRegex.FindStringSubmatch(fileContent)
+
+	var frontmatter string
+	var template string
+
+	if len(matches) > 1 {
+		frontmatter = matches[1]
+		// Get everything after the closing ---
+		templateStart := strings.Index(fileContent, "---")
+		if templateStart != -1 {
+			secondDashIndex := strings.Index(fileContent[templateStart+3:], "---")
+			if secondDashIndex != -1 {
+				template = fileContent[templateStart+3+secondDashIndex+3:]
+			}
+		}
+	} else {
+		// No frontmatter, entire file is template
+		template = fileContent
+	}
+
+	// Parse frontmatter as TypeScript/JavaScript
+	if frontmatter != "" {
+		parseFrontmatter(frontmatter, out, fileInfo)
+	}
+
+	// Parse template section for Astro-specific patterns
+	parseAstroTemplate(template, out, fileInfo)
+}
+
+// Parse Astro frontmatter section
+func parseFrontmatter(frontmatter string, out *outline, fileInfo *fileInfo) {
+	scanner := bufio.NewScanner(strings.NewReader(frontmatter))
+
+	// Reuse enhanced JS/TS patterns for frontmatter
+	importRegex := regexp.MustCompile(`^\s*import\s+(.+?)\s+from\s+['\"](.*?)['\"]`)
+	constRegex := regexp.MustCompile(`^\s*const\s+(\w+)\s*=`)
+	functionRegex := regexp.MustCompile(`^\s*(?:const\s+)?(\w+)\s*=\s*\(([^)]*)\)\s*=>`)
+	propsRegex := regexp.MustCompile(`^\s*const\s*\{([^}]+)\}\s*=\s*Astro\.props`)
+
+	var imports []string
+	var astroProps []string
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip comments and empty lines
+		if strings.HasPrefix(line, "//") || strings.HasPrefix(line, "/*") || line == "" {
+			continue
+		}
+
+		// Check for imports
+		if matches := importRegex.FindStringSubmatch(line); matches != nil {
+			imports = append(imports, matches[2])
+		}
+
+		// Check for Astro props destructuring
+		if matches := propsRegex.FindStringSubmatch(line); matches != nil {
+			propsStr := strings.ReplaceAll(matches[1], " ", "")
+			props := strings.Split(propsStr, ",")
+			for _, prop := range props {
+				prop = strings.TrimSpace(prop)
+				if prop != "" {
+					astroProps = append(astroProps, prop)
+				}
+			}
+		}
+
+		// Check for constants and functions
+		if matches := constRegex.FindStringSubmatch(line); matches != nil {
+			fileInfo.vars = append(fileInfo.vars, matches[1])
+			out.vars = append(out.vars, matches[1])
+		}
+
+		if matches := functionRegex.FindStringSubmatch(line); matches != nil {
+			params := extractJSParams(matches[2])
+			funcInfo := functionInfo{name: matches[1], params: params, returnType: ""}
+			fileInfo.functions = append(fileInfo.functions, funcInfo)
+			out.funcs = append(out.funcs, matches[1])
+		}
+	}
+
+	// Store Astro-specific information
+	if len(imports) > 0 {
+		fileInfo.types = append(fileInfo.types, "ASTRO_IMPORTS: "+strings.Join(imports, ", "))
+	}
+	if len(astroProps) > 0 {
+		fileInfo.types = append(fileInfo.types, "ASTRO_PROPS: "+strings.Join(astroProps, ", "))
+	}
+}
+
+// Parse Astro template section
+func parseAstroTemplate(template string, out *outline, fileInfo *fileInfo) {
+	// Patterns for Astro template analysis
+	componentUsageRegex := regexp.MustCompile(`<(\w+)(?:\s+[^>]*)?(?:/>|>)`)
+	clientDirectiveRegex := regexp.MustCompile(`client:(\w+)`)
+	slotRegex := regexp.MustCompile(`<slot(?:\s+name=[\"'](\w+)[\"'])?`)
+
+	var usedComponents []string
+	var clientDirectives []string
+	var slots []string
+
+	// Find component usage
+	matches := componentUsageRegex.FindAllStringSubmatch(template, -1)
+	for _, match := range matches {
+		componentName := match[1]
+		// Filter out HTML tags (lowercase) and common Astro elements
+		if componentName[0] >= 'A' && componentName[0] <= 'Z' &&
+			componentName != "Fragment" && !contains(usedComponents, componentName) {
+			usedComponents = append(usedComponents, componentName)
+		}
+	}
+
+	// Find client directives
+	matches = clientDirectiveRegex.FindAllStringSubmatch(template, -1)
+	for _, match := range matches {
+		directive := match[1]
+		if !contains(clientDirectives, directive) {
+			clientDirectives = append(clientDirectives, directive)
+		}
+	}
+
+	// Find slots
+	matches = slotRegex.FindAllStringSubmatch(template, -1)
+	for _, match := range matches {
+		slotName := "default"
+		if len(match) > 1 && match[1] != "" {
+			slotName = match[1]
+		}
+		if !contains(slots, slotName) {
+			slots = append(slots, slotName)
+		}
+	}
+
+	// Store template analysis results
+	if len(usedComponents) > 0 {
+		fileInfo.types = append(fileInfo.types, "ASTRO_COMPONENTS: "+strings.Join(usedComponents, ", "))
+	}
+	if len(clientDirectives) > 0 {
+		fileInfo.types = append(fileInfo.types, "CLIENT_DIRECTIVES: "+strings.Join(clientDirectives, ", "))
+	}
+	if len(slots) > 0 {
+		fileInfo.types = append(fileInfo.types, "SLOTS: "+strings.Join(slots, ", "))
+	}
 }
