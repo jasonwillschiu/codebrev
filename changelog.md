@@ -1,3 +1,7 @@
+# 0.1.3 - Update: refactor to use /internal folder
+- packages are: gitignore, outline, parser and writer
+- tested on go files, .astro, .js and .tsx files
+
 # 0.1.2 - Add: .astro and better .tsx file support
 - improved outputs for .tsx files
 - .astro files now show something useful

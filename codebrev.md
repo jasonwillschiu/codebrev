@@ -2,6 +2,120 @@
 
 This file provides an overview of available functions, types, and variables per file for LLM context.
 
+## internal/gitignore/gitignore.go
+
+### Functions
+- New(root string) -> *Gitignore
+- findGitRoot(startPath string) -> string
+
+### Types
+- Gitignore (methods: ShouldIgnore, loadGitignoreHierarchy, loadGitignoreFile, loadGitignoreFromPath, matchPattern) (fields: Patterns, Root, GitRoot, LoadedDirs)
+- Pattern (fields: Pattern, BaseDir)
+
+### Variables
+- dir
+
+---
+
+## internal/outline/dedup.go
+
+### Variables
+- uniqueFileFuncs
+- uniqueFileVars
+- uniqueFuncs
+- uniqueTypes
+- uniqueVars
+
+---
+
+## internal/outline/types.go
+
+### Functions
+- New() -> *Outline
+
+### Types
+- FileInfo (fields: Path, Functions, Types, Vars)
+- FunctionInfo (fields: Name, Params, ReturnType)
+- Outline (methods: RemoveDuplicates, EnsureType, AddFile) (fields: Files, Types, Vars, Funcs)
+- TypeInfo (fields: Fields, Methods)
+
+---
+
+## internal/parser/astro.go
+
+### Functions
+- parseAstroFile(path string, out *outline.Outline, fileInfo *outline.FileInfo) -> error
+- parseAstroTemplate(template string, fileInfo *outline.FileInfo)
+- parseFrontmatter(frontmatter string, out *outline.Outline, fileInfo *outline.FileInfo)
+
+### Variables
+- astroProps
+- clientDirectives
+- frontmatter
+- imports
+- slots
+- template
+- usedComponents
+
+---
+
+## internal/parser/go.go
+
+### Functions
+- extractFunctionInfo(d *ast.FuncDecl) -> outline.FunctionInfo
+- parseGoFile(path string, out *outline.Outline, fileInfo *outline.FileInfo, fset *token.FileSet) -> error
+- receiverType(expr ast.Expr) -> string
+- typeToString(expr ast.Expr) -> string
+
+### Variables
+- returnTypes
+
+---
+
+## internal/parser/js.go
+
+### Functions
+- contains(slice []string, item string) -> bool
+- extractJSParams(paramStr string) -> []string
+- isUpperCase(s string) -> bool
+- parseJSFile(path string, out *outline.Outline, fileInfo *outline.FileInfo) -> error
+
+### Variables
+- currentClass
+- currentInterface
+- exports
+- hooks
+- imports
+- jsxComponents
+- result
+
+---
+
+## internal/parser/parser.go
+
+### Functions
+- ProcessFiles(root string, out *outline.Outline) -> error
+- processFile(path string, info os.FileInfo, out *outline.Outline, fset *token.FileSet) -> error
+
+---
+
+## internal/writer/writer.go
+
+### Functions
+- WriteOutlineToFile(out *outline.Outline) -> error
+
+### Variables
+- filePaths
+
+---
+
+## main.go
+
+### Functions
+- main()
+
+---
+
 ## test-files/frontend4/src/components/FAQSection.astro
 
 ---
