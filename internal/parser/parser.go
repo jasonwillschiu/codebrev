@@ -72,9 +72,11 @@ func processFile(path string, info os.FileInfo, out *outline.Outline, fset *toke
 	} else if strings.HasSuffix(path, ".astro") {
 		// Use custom Astro parser for better extraction
 		return parseAstroFile(path, out, fileInfo)
-	} else {
-		// Use tree-sitter for other non-Go files
-		parser := NewTreeSitterParser()
-		return parser.parseWithTreeSitter(path, out, fileInfo)
+	} else if strings.HasSuffix(path, ".js") || strings.HasSuffix(path, ".jsx") ||
+		strings.HasSuffix(path, ".ts") || strings.HasSuffix(path, ".tsx") {
+		// Use custom TypeScript/JavaScript parser
+		return parseTypeScriptFile(path, out, fileInfo)
 	}
+
+	return nil
 }

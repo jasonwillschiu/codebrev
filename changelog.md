@@ -1,3 +1,10 @@
+# 0.3.0 - Update: refactor for better schema, removed treesitter
+- focus on imports, functions and types
+- where functions and types have input/output and schema where possible
+- remove variables and constants as that's not useful
+- remove treesitter, it didn't add value for the complexity
+- the goal is that the output file gives an llm-useful-summary of the codebase, where an LLM can view the summary and not miss files to edit and understand the existing functions and types
+
 # 0.2.0 - Update: refactor to use treesitter algorithm for most
 - .go, .js, .ts and .tsx now parsed with treesitter
 - .astro still uses custom regex parsing

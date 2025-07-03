@@ -38,14 +38,7 @@ func parseGoFile(path string, out *outline.Outline, fileInfo *outline.FileInfo, 
 					}
 				}
 
-			case token.VAR:
-				for _, s := range d.Specs {
-					vs := s.(*ast.ValueSpec)
-					for _, name := range vs.Names {
-						fileInfo.Vars = append(fileInfo.Vars, name.Name)
-						out.Vars = append(out.Vars, name.Name)
-					}
-				}
+				// Variables removed - not useful for LLM context
 			}
 
 		// ---------- functions ----------
