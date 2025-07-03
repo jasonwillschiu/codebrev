@@ -1,3 +1,7 @@
+# 0.3.1 - Fix: only function files now have output
+- previously if a file only had a function, it would not output anything
+- also updated README and AGENTS.md
+
 # 0.3.0 - Update: refactor for better schema, removed treesitter
 - focus on imports, functions and types
 - where functions and types have input/output and schema where possible

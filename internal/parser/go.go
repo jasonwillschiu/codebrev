@@ -50,6 +50,11 @@ func parseGoFile(path string, out *outline.Outline, fileInfo *outline.FileInfo, 
 			} else { // method with receiver
 				recv := receiverType(d.Recv.List[0].Type)
 				out.EnsureType(recv).Methods = append(out.EnsureType(recv).Methods, d.Name.Name)
+
+				// Also add method to file's function list for better visibility
+				funcInfo := extractFunctionInfo(d)
+				funcInfo.Name = "(" + recv + ") " + funcInfo.Name // prefix with receiver type
+				fileInfo.Functions = append(fileInfo.Functions, funcInfo)
 			}
 		}
 		return true

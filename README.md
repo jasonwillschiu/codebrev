@@ -8,17 +8,17 @@ Code4Context analyzes your codebase and generates a structured markdown summary 
 
 - **Functions** with parameters and return types
 - **Types/Classes/Interfaces** with their fields and methods  
-- **Variables** and constants
 - **Import/Export dependencies** for understanding relationships
 - **File-by-file breakdown** for easy navigation
+- **Method visibility** in both file sections and type definitions
 
 This summary is optimized for LLM consumption, helping AI assistants understand your codebase structure quickly.
 
 ## Supported Languages
 
-- **Go** (.go files) - Full AST parsing with complete type information
-- **JavaScript** (.js, .jsx files) - Tree-sitter parsing for accurate syntax analysis
-- **TypeScript** (.ts, .tsx files) - Tree-sitter parsing with interface and type support
+- **Go** (.go files) - Full AST parsing with complete type information and method visibility
+- **JavaScript** (.js, .jsx files) - Regex-based parsing optimized for LLM context
+- **TypeScript** (.ts, .tsx files) - Regex-based parsing with interface and type support
 - **Astro** (.astro files) - Custom parser for component and TypeScript extraction
 
 ## Installation
@@ -54,15 +54,13 @@ The tool generates `codebrev.md` with a structured overview:
 ## main.go
 
 ### Functions
+- (Outline) RemoveDuplicates()
 - main()
 - processFile(path string, info os.FileInfo, out *outline, fset *token.FileSet) -> error
 
 ### Types
 - Outline (methods: RemoveDuplicates, EnsureType, AddFile) (fields: Files, Types, Vars, Funcs)
 - FileInfo (fields: Path, Functions, Types, Vars)
-
-### Variables
-- supportedExts
 
 ---
 
@@ -96,16 +94,16 @@ The tool generates `codebrev.md` with a structured overview:
 ## Architecture
 
 ### Parsing Engine
-- **Go Parser**: Native AST parsing using `go/ast` for complete type information
-- **Tree-sitter Parser**: Advanced syntax parsing for JavaScript, TypeScript, and JSX
+- **Go Parser**: Native AST parsing using `go/ast` for complete type information and method visibility
+- **Regex Parser**: Optimized regex-based parsing for JavaScript, TypeScript, and JSX (tree-sitter removed)
 - **Astro Parser**: Custom parser for Astro components with TypeScript extraction
 - **Robust Error Handling**: Graceful degradation when parsing fails
 
 ### Smart Filtering
 - **Test File Exclusion**: Automatically skips `*_test.go`, `*.test.js`, `*.spec.js`
-- **Temporary Variable Filtering**: Removes common loop variables and temporary names
+- **Variable Filtering**: Variables and constants removed (focus on functions, types, imports)
 - **Duplicate Removal**: Ensures clean, deduplicated output across files
-- **Meaningful Variable Detection**: Focuses on constants and configuration variables
+- **LLM-Optimized Content**: Focuses on functions, types, and imports for better context
 
 ### Output Optimization
 - **LLM-Structured Format**: Hierarchical markdown optimized for AI consumption

@@ -5,6 +5,11 @@ This file provides an overview of available functions, types, and variables per 
 ## internal/gitignore/gitignore.go
 
 ### Functions
+- (Gitignore) ShouldIgnore(path string) -> bool
+- (Gitignore) loadGitignoreFile(gitignorePath string)
+- (Gitignore) loadGitignoreFromPath(path string)
+- (Gitignore) loadGitignoreHierarchy(gitRoot string, scanRoot string)
+- (Gitignore) matchPattern(path string, pattern string) -> bool
 - New(root string) -> *Gitignore
 - findGitRoot(startPath string) -> string
 
@@ -16,11 +21,16 @@ This file provides an overview of available functions, types, and variables per 
 
 ## internal/outline/dedup.go
 
+### Functions
+- (Outline) RemoveDuplicates()
+
 ---
 
 ## internal/outline/types.go
 
 ### Functions
+- (Outline) AddFile(path string) -> *FileInfo
+- (Outline) EnsureType(name string) -> *TypeInfo
 - New() -> *Outline
 
 ### Types

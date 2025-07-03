@@ -34,17 +34,18 @@ Code4Context generates structured summaries of codebases specifically designed f
 - Full AST parsing with complete type information
 - Accurate parameter types and return values
 - Struct fields and method receivers
-- Package-level variables and constants
 - Interface definitions with method signatures
+- Methods now appear both in their file sections and as type methods
+- Method signatures include receiver type for clarity (e.g., `(TypeName) methodName()`)
 
 **JavaScript/TypeScript (.js, .jsx, .ts, .tsx)**
-- Tree-sitter parsing for accurate syntax analysis
+- Regex-based parsing optimized for LLM context extraction
 - Function declarations, arrow functions, and method definitions
 - Class definitions with methods and properties
 - Interface and type alias declarations (TypeScript)
 - Enum declarations and type annotations
-- Import/export statements tracked as special types
-- Robust error handling with graceful degradation
+- Import/export statements tracked for dependency analysis
+- Focused on functions, types, and imports (variables/constants filtered out)
 
 **Astro Files (.astro)**
 - Custom parser for component extraction
@@ -72,10 +73,10 @@ Code4Context generates structured summaries of codebases specifically designed f
 ### 4. Smart Filtering Applied
 The tool automatically filters out:
 - Test files (`*_test.go`, `*.test.js`, `*.spec.js`)
-- Temporary variables (`i`, `j`, `tmp`, `temp`, `idx`, `len`, etc.)
-- Common noise patterns (`err`, `ctx`, `req`, `resp`, `data`, etc.)
+- Variables and constants (focus on functions, types, and imports only)
 - Duplicate declarations across files
-- Single-character variables and meaningless names
+- Noise patterns that don't provide LLM context value
+- Tree-sitter dependencies removed for simplified, focused parsing
 
 ### 5. Enhanced Dependency Tracking
 The tool now captures:
@@ -83,6 +84,7 @@ The tool now captures:
 - **Export declarations**: What each file makes available to others
 - **Component relationships**: Astro component imports and usage
 - **Type dependencies**: Interface and type alias relationships
+- **Method visibility**: Methods appear both in file sections and type definitions
 
 ## Integration Patterns
 
@@ -147,7 +149,7 @@ graph TD
 
 ### Graceful Degradation
 - **Parsing Failures**: Individual file parsing errors don't stop the entire process
-- **Query Fallbacks**: Multiple tree-sitter queries with increasing simplicity
+- **Simplified Parsing**: Removed tree-sitter complexity for more reliable extraction
 - **Language Detection**: Automatic language selection based on file extensions
 - **Warning System**: Non-fatal warnings for partial parsing failures
 
