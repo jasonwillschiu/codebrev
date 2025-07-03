@@ -7,8 +7,9 @@ A tool that generates LLM-useful summaries of codebases, files, and folders to p
 Code4Context analyzes your codebase and generates a structured markdown summary (`codebrev.md`) that contains:
 
 - **Functions** with parameters and return types
-- **Types/Classes/Structs** with their fields and methods  
+- **Types/Classes/Interfaces** with their fields and methods  
 - **Variables** and constants
+- **Import/Export dependencies** for understanding relationships
 - **File-by-file breakdown** for easy navigation
 
 This summary is optimized for LLM consumption, helping AI assistants understand your codebase structure quickly.
@@ -16,8 +17,9 @@ This summary is optimized for LLM consumption, helping AI assistants understand 
 ## Supported Languages
 
 - **Go** (.go files) - Full AST parsing with complete type information
-- **JavaScript** (.js, .jsx files) - Regex-based parsing for functions, classes, and exports
-- **TypeScript** (.ts, .tsx files) - Regex-based parsing with type annotations
+- **JavaScript** (.js, .jsx files) - Tree-sitter parsing for accurate syntax analysis
+- **TypeScript** (.ts, .tsx files) - Tree-sitter parsing with interface and type support
+- **Astro** (.astro files) - Custom parser for component and TypeScript extraction
 
 ## Installation
 
@@ -54,30 +56,78 @@ The tool generates `codebrev.md` with a structured overview:
 ### Functions
 - main()
 - processFile(path string, info os.FileInfo, out *outline, fset *token.FileSet) -> error
-- extractFunctionInfo(d *ast.FuncDecl) -> functionInfo
 
 ### Types
-- outline (methods: ensureType) (fields: files, types, vars, funcs)
-- fileInfo (fields: path, functions, types, vars)
+- Outline (methods: RemoveDuplicates, EnsureType, AddFile) (fields: Files, Types, Vars, Funcs)
+- FileInfo (fields: Path, Functions, Types, Vars)
 
 ### Variables
-- currentClass
-- imports
-- exports
+- supportedExts
+
+---
+
+## src/components/App.tsx
+
+### Functions
+- App()
+- handleSubmit()
+- validateInput()
+
+### Types
+- IMPORTS: React, useState, useEffect, axios
+
+### Variables
+- DEFAULT_CONFIG
+
+---
+
+## lib/utils.js
+
+### Functions
+- formatDate()
+- debounce()
+- throttle()
+
+### Types
+- IMPORTS: lodash, moment
+- EXPORTS: formatDate, debounce, throttle
 ```
+
+## Architecture
+
+### Parsing Engine
+- **Go Parser**: Native AST parsing using `go/ast` for complete type information
+- **Tree-sitter Parser**: Advanced syntax parsing for JavaScript, TypeScript, and JSX
+- **Astro Parser**: Custom parser for Astro components with TypeScript extraction
+- **Robust Error Handling**: Graceful degradation when parsing fails
+
+### Smart Filtering
+- **Test File Exclusion**: Automatically skips `*_test.go`, `*.test.js`, `*.spec.js`
+- **Temporary Variable Filtering**: Removes common loop variables and temporary names
+- **Duplicate Removal**: Ensures clean, deduplicated output across files
+- **Meaningful Variable Detection**: Focuses on constants and configuration variables
+
+### Output Optimization
+- **LLM-Structured Format**: Hierarchical markdown optimized for AI consumption
+- **Import/Export Tracking**: Captures dependencies and component relationships
+- **Cross-Language Consistency**: Unified format across different programming languages
+- **File-by-File Organization**: Clear separation for easy navigation
 
 ## Features
 
-- **Smart filtering**: Excludes test files, temporary variables, and common noise
-- **Duplicate removal**: Ensures clean, deduplicated output
-- **Cross-language support**: Handles multiple programming languages
-- **LLM-optimized**: Structured format perfect for AI context
+- **Multi-language Support**: Go, JavaScript, TypeScript, JSX, TSX, and Astro files
+- **Dependency Mapping**: Tracks imports, exports, and component relationships
+- **Type Information**: Captures classes, interfaces, structs with methods and fields
+- **Function Signatures**: Extracts parameters and return types where available
+- **Smart Filtering**: Excludes noise while preserving meaningful code structure
+- **Error Resilience**: Continues processing even when individual files fail to parse
 
 ## Future Enhancements
 
-- **Dependency diagrams**: Mermaid charts showing file relationships and imports
-- **Call graph analysis**: Function usage and dependency mapping
-- **Module structure**: Package/namespace organization visualization
+- **Mermaid Diagrams**: Visual representation of file dependencies and imports
+- **Call Graph Analysis**: Function usage and relationship mapping
+- **Module Visualization**: Package/namespace organization charts
+- **API Documentation**: Auto-generated docs from extracted signatures
 
 ## Contributing
 

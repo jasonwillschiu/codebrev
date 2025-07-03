@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "document-downloader": {
+      "type": "local",
+      "command": [
+        "./mcp-servers/docs4context-com"
+      ],
+      "environment": {}
+    }
+  }
+}

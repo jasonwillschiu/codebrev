@@ -9,160 +9,273 @@ import (
 	"code4context/internal/outline"
 )
 
-// parseAstroFile parses Astro files with specialized handling
+// parseAstroFile parses an Astro file by extracting frontmatter and template information
 func parseAstroFile(path string, out *outline.Outline, fileInfo *outline.FileInfo) error {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 
-	fileContent := string(content)
+	contentStr := string(content)
 
-	// Split Astro file into frontmatter and template sections
-	frontmatterRegex := regexp.MustCompile(`(?s)^---\s*\n(.*?)\n---`)
-	matches := frontmatterRegex.FindStringSubmatch(fileContent)
+	// Split Astro file into frontmatter and template
+	frontmatter, template := splitAstroFile(contentStr)
 
-	var frontmatter string
-	var template string
-
-	if len(matches) > 1 {
-		frontmatter = matches[1]
-		// Get everything after the closing ---
-		templateStart := strings.Index(fileContent, "---")
-		if templateStart != -1 {
-			secondDashIndex := strings.Index(fileContent[templateStart+3:], "---")
-			if secondDashIndex != -1 {
-				template = fileContent[templateStart+3+secondDashIndex+3:]
-			}
-		}
-	} else {
-		// No frontmatter, entire file is template
-		template = fileContent
-	}
-
-	// Parse frontmatter as TypeScript/JavaScript
+	// Parse frontmatter as TypeScript
 	if frontmatter != "" {
-		parseFrontmatter(frontmatter, out, fileInfo)
+		if err := parseTypeScriptContent(frontmatter, out, fileInfo); err != nil {
+			// Don't fail completely if frontmatter parsing fails
+			// Just log and continue
+		}
 	}
 
-	// Parse template section for Astro-specific patterns
-	parseAstroTemplate(template, fileInfo)
+	// Parse template for component usage and structure
+	parseAstroTemplate(template, out, fileInfo)
 
 	return nil
 }
 
-// parseFrontmatter parses Astro frontmatter section
-func parseFrontmatter(frontmatter string, out *outline.Outline, fileInfo *outline.FileInfo) {
-	scanner := bufio.NewScanner(strings.NewReader(frontmatter))
+// splitAstroFile splits an Astro file into frontmatter and template sections
+func splitAstroFile(content string) (frontmatter, template string) {
+	lines := strings.Split(content, "\n")
 
-	// Reuse enhanced JS/TS patterns for frontmatter
-	importRegex := regexp.MustCompile(`^\s*import\s+(.+?)\s+from\s+['\"](.*?)['\"]`)
-	constRegex := regexp.MustCompile(`^\s*const\s+(\w+)\s*=`)
-	functionRegex := regexp.MustCompile(`^\s*(?:const\s+)?(\w+)\s*=\s*\(([^)]*)\)\s*=>`)
-	propsRegex := regexp.MustCompile(`^\s*const\s*\{([^}]+)\}\s*=\s*Astro\.props`)
+	if len(lines) == 0 {
+		return "", content
+	}
+
+	// Check if file starts with frontmatter delimiter
+	if strings.TrimSpace(lines[0]) != "---" {
+		return "", content
+	}
+
+	// Find the closing frontmatter delimiter
+	frontmatterEnd := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			frontmatterEnd = i
+			break
+		}
+	}
+
+	if frontmatterEnd == -1 {
+		// No closing delimiter found, treat entire file as template
+		return "", content
+	}
+
+	// Extract frontmatter (excluding delimiters)
+	frontmatterLines := lines[1:frontmatterEnd]
+	frontmatter = strings.Join(frontmatterLines, "\n")
+
+	// Extract template (everything after closing delimiter)
+	if frontmatterEnd+1 < len(lines) {
+		templateLines := lines[frontmatterEnd+1:]
+		template = strings.Join(templateLines, "\n")
+	}
+
+	return frontmatter, template
+}
+
+// parseTypeScriptContent parses TypeScript frontmatter content
+func parseTypeScriptContent(content string, out *outline.Outline, fileInfo *outline.FileInfo) error {
+	scanner := bufio.NewScanner(strings.NewReader(content))
+
+	// Regular expressions for TypeScript constructs
+	interfaceRegex := regexp.MustCompile(`^\s*interface\s+(\w+)`)
+	typeRegex := regexp.MustCompile(`^\s*type\s+(\w+)`)
+	constRegex := regexp.MustCompile(`^\s*const\s+(\w+)`)
+	letRegex := regexp.MustCompile(`^\s*let\s+(\w+)`)
+	varRegex := regexp.MustCompile(`^\s*var\s+(\w+)`)
+	functionRegex := regexp.MustCompile(`^\s*function\s+(\w+)\s*\(([^)]*)\)`)
+	arrowFunctionRegex := regexp.MustCompile(`^\s*const\s+(\w+)\s*=\s*\([^)]*\)\s*=>`)
+	importRegex := regexp.MustCompile(`^\s*import\s+.*from\s+['"]([^'"]+)['"]`)
 
 	var imports []string
-	var astroProps []string
 
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		line := scanner.Text()
 
-		// Skip comments and empty lines
-		if strings.HasPrefix(line, "//") || strings.HasPrefix(line, "/*") || line == "" {
-			continue
+		// Extract interfaces
+		if matches := interfaceRegex.FindStringSubmatch(line); len(matches) > 1 {
+			typeName := matches[1]
+			fileInfo.Types = append(fileInfo.Types, typeName)
+			out.EnsureType(typeName)
 		}
 
-		// Check for imports
-		if matches := importRegex.FindStringSubmatch(line); matches != nil {
-			imports = append(imports, matches[2])
+		// Extract type aliases
+		if matches := typeRegex.FindStringSubmatch(line); len(matches) > 1 {
+			typeName := matches[1]
+			fileInfo.Types = append(fileInfo.Types, typeName)
+			out.EnsureType(typeName)
 		}
 
-		// Check for Astro props destructuring
-		if matches := propsRegex.FindStringSubmatch(line); matches != nil {
-			propsStr := strings.ReplaceAll(matches[1], " ", "")
-			props := strings.Split(propsStr, ",")
-			for _, prop := range props {
-				prop = strings.TrimSpace(prop)
-				if prop != "" {
-					astroProps = append(astroProps, prop)
+		// Extract functions
+		if matches := functionRegex.FindStringSubmatch(line); len(matches) > 1 {
+			funcName := matches[1]
+			params := strings.Split(matches[2], ",")
+			for i, param := range params {
+				params[i] = strings.TrimSpace(param)
+			}
+
+			funcInfo := outline.FunctionInfo{
+				Name:   funcName,
+				Params: params,
+			}
+			fileInfo.Functions = append(fileInfo.Functions, funcInfo)
+			out.Funcs = append(out.Funcs, funcName)
+		}
+
+		// Extract arrow functions
+		if matches := arrowFunctionRegex.FindStringSubmatch(line); len(matches) > 1 {
+			funcName := matches[1]
+			funcInfo := outline.FunctionInfo{
+				Name:   funcName,
+				Params: []string{}, // Could be enhanced to extract params
+			}
+			fileInfo.Functions = append(fileInfo.Functions, funcInfo)
+			out.Funcs = append(out.Funcs, funcName)
+		}
+
+		// Extract meaningful variables
+		for _, regex := range []*regexp.Regexp{constRegex, letRegex, varRegex} {
+			if matches := regex.FindStringSubmatch(line); len(matches) > 1 {
+				varName := matches[1]
+				if isMeaningfulAstroVariable(varName) {
+					fileInfo.Vars = append(fileInfo.Vars, varName)
+					out.Vars = append(out.Vars, varName)
 				}
 			}
 		}
 
-		// Check for constants and functions
-		if matches := constRegex.FindStringSubmatch(line); matches != nil {
-			fileInfo.Vars = append(fileInfo.Vars, matches[1])
-			out.Vars = append(out.Vars, matches[1])
-		}
-
-		if matches := functionRegex.FindStringSubmatch(line); matches != nil {
-			params := extractJSParams(matches[2])
-			funcInfo := outline.FunctionInfo{Name: matches[1], Params: params, ReturnType: ""}
-			fileInfo.Functions = append(fileInfo.Functions, funcInfo)
-			out.Funcs = append(out.Funcs, matches[1])
+		// Extract imports
+		if matches := importRegex.FindStringSubmatch(line); len(matches) > 1 {
+			imports = append(imports, matches[1])
 		}
 	}
 
-	// Store Astro-specific information
+	// Add imports as a special type
 	if len(imports) > 0 {
-		fileInfo.Types = append(fileInfo.Types, "ASTRO_IMPORTS: "+strings.Join(imports, ", "))
+		importStr := "IMPORTS: " + strings.Join(removeDuplicateStrings(imports), ", ")
+		fileInfo.Types = append(fileInfo.Types, importStr)
 	}
-	if len(astroProps) > 0 {
-		fileInfo.Types = append(fileInfo.Types, "ASTRO_PROPS: "+strings.Join(astroProps, ", "))
+
+	return nil
+}
+
+// parseAstroTemplate parses the template section for component usage
+func parseAstroTemplate(template string, out *outline.Outline, fileInfo *outline.FileInfo) {
+	// Extract component usage from template
+	componentRegex := regexp.MustCompile(`<(\w+)(?:\s|>|/>)`)
+	matches := componentRegex.FindAllStringSubmatch(template, -1)
+
+	var components []string
+	for _, match := range matches {
+		if len(match) > 1 {
+			componentName := match[1]
+			// Filter out standard HTML elements
+			if isCustomComponent(componentName) {
+				components = append(components, componentName)
+			}
+		}
+	}
+
+	// Add components as a special type
+	if len(components) > 0 {
+		componentStr := "COMPONENTS: " + strings.Join(removeDuplicateStrings(components), ", ")
+		fileInfo.Types = append(fileInfo.Types, componentStr)
+	}
+
+	// Extract expressions/interpolations
+	expressionRegex := regexp.MustCompile(`\{([^}]+)\}`)
+	expressionMatches := expressionRegex.FindAllStringSubmatch(template, -1)
+
+	var expressions []string
+	for _, match := range expressionMatches {
+		if len(match) > 1 {
+			expr := strings.TrimSpace(match[1])
+			// Extract variable references from expressions
+			if varMatch := regexp.MustCompile(`^\w+`).FindString(expr); varMatch != "" {
+				if isMeaningfulAstroVariable(varMatch) {
+					expressions = append(expressions, varMatch)
+				}
+			}
+		}
+	}
+
+	// Add template variables
+	if len(expressions) > 0 {
+		for _, expr := range removeDuplicateStrings(expressions) {
+			fileInfo.Vars = append(fileInfo.Vars, expr)
+			out.Vars = append(out.Vars, expr)
+		}
 	}
 }
 
-// parseAstroTemplate parses Astro template section
-func parseAstroTemplate(template string, fileInfo *outline.FileInfo) {
-	// Patterns for Astro template analysis
-	componentUsageRegex := regexp.MustCompile(`<(\w+)(?:\s+[^>]*)?(?:/>|>)`)
-	clientDirectiveRegex := regexp.MustCompile(`client:(\w+)`)
-	slotRegex := regexp.MustCompile(`<slot(?:\s+name=[\"'](\w+)[\"'])?`)
+// isCustomComponent checks if a tag name represents a custom component
+func isCustomComponent(tagName string) bool {
+	// Standard HTML elements (not exhaustive, but covers common ones)
+	htmlElements := map[string]bool{
+		"div": true, "span": true, "p": true, "a": true, "img": true,
+		"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
+		"ul": true, "ol": true, "li": true, "table": true, "tr": true, "td": true, "th": true,
+		"form": true, "input": true, "button": true, "select": true, "option": true,
+		"header": true, "footer": true, "nav": true, "main": true, "section": true, "article": true,
+		"aside": true, "figure": true, "figcaption": true, "time": true, "address": true,
+		"blockquote": true, "cite": true, "code": true, "pre": true, "kbd": true, "samp": true,
+		"var": true, "sub": true, "sup": true, "small": true, "strong": true, "em": true,
+		"mark": true, "del": true, "ins": true, "q": true, "abbr": true, "dfn": true,
+		"ruby": true, "rt": true, "rp": true, "bdi": true, "bdo": true, "wbr": true,
+		"details": true, "summary": true, "menuitem": true, "menu": true,
+	}
 
-	var usedComponents []string
-	var clientDirectives []string
-	var slots []string
+	// Custom components typically start with uppercase or contain hyphens
+	return !htmlElements[strings.ToLower(tagName)] &&
+		(strings.ToUpper(tagName[:1]) == tagName[:1] || strings.Contains(tagName, "-"))
+}
 
-	// Find component usage
-	matches := componentUsageRegex.FindAllStringSubmatch(template, -1)
-	for _, match := range matches {
-		componentName := match[1]
-		// Filter out HTML tags (lowercase) and common Astro elements
-		if componentName[0] >= 'A' && componentName[0] <= 'Z' &&
-			componentName != "Fragment" && !contains(usedComponents, componentName) {
-			usedComponents = append(usedComponents, componentName)
+// isMeaningfulAstroVariable checks if a variable name is meaningful for Astro context
+func isMeaningfulAstroVariable(name string) bool {
+	if len(name) <= 1 {
+		return false
+	}
+
+	// Common temporary variables to filter out
+	tempVars := map[string]bool{
+		"i": true, "j": true, "k": true, "x": true, "y": true, "z": true,
+		"a": true, "b": true, "c": true, "d": true, "e": true, "f": true,
+		"n": true, "m": true, "o": true, "p": true, "q": true, "r": true,
+		"s": true, "t": true, "u": true, "v": true, "w": true,
+		"idx": true, "len": true, "tmp": true, "temp": true, "val": true,
+		"res": true, "ret": true, "err": true, "ctx": true, "req": true,
+		"resp": true, "data": true, "item": true, "elem": true, "node": true,
+		"key": true, "value": true, "index": true, "count": true, "size": true,
+	}
+
+	if tempVars[strings.ToLower(name)] {
+		return false
+	}
+
+	// Include meaningful constants and configuration
+	lowerName := strings.ToLower(name)
+	return strings.ToUpper(name) == name || // ALL_CAPS constants
+		strings.Contains(lowerName, "config") ||
+		strings.Contains(lowerName, "default") ||
+		strings.Contains(lowerName, "option") ||
+		strings.Contains(lowerName, "setting") ||
+		strings.Contains(lowerName, "props") ||
+		len(name) > 3 // Generally meaningful if longer than 3 chars
+}
+
+// removeDuplicateStrings removes duplicate strings from a slice
+func removeDuplicateStrings(slice []string) []string {
+	seen := make(map[string]bool)
+	var result []string
+
+	for _, item := range slice {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
 		}
 	}
 
-	// Find client directives
-	matches = clientDirectiveRegex.FindAllStringSubmatch(template, -1)
-	for _, match := range matches {
-		directive := match[1]
-		if !contains(clientDirectives, directive) {
-			clientDirectives = append(clientDirectives, directive)
-		}
-	}
-
-	// Find slots
-	matches = slotRegex.FindAllStringSubmatch(template, -1)
-	for _, match := range matches {
-		slotName := "default"
-		if len(match) > 1 && match[1] != "" {
-			slotName = match[1]
-		}
-		if !contains(slots, slotName) {
-			slots = append(slots, slotName)
-		}
-	}
-
-	// Store template analysis results
-	if len(usedComponents) > 0 {
-		fileInfo.Types = append(fileInfo.Types, "ASTRO_COMPONENTS: "+strings.Join(usedComponents, ", "))
-	}
-	if len(clientDirectives) > 0 {
-		fileInfo.Types = append(fileInfo.Types, "CLIENT_DIRECTIVES: "+strings.Join(clientDirectives, ", "))
-	}
-	if len(slots) > 0 {
-		fileInfo.Types = append(fileInfo.Types, "SLOTS: "+strings.Join(slots, ", "))
-	}
+	return result
 }

@@ -1,3 +1,8 @@
+# 0.2.0 - Update: refactor to use treesitter algorithm for most
+- .go, .js, .ts and .tsx now parsed with treesitter
+- .astro still uses custom regex parsing
+- a working state, still no mermaid diagrams
+
 # 0.1.3 - Update: refactor to use /internal folder
 - packages are: gitignore, outline, parser and writer
 - tested on go files, .astro, .js and .tsx files
