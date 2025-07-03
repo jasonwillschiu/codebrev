@@ -1,3 +1,8 @@
+# 0.4.0 - Update: refactor to mcp server
+- uses mark3labs/mcp-go now
+- todo: install and update for the mcp server
+- with installation, add a README and add to gitignore, see if i can use an interactive installer
+
 # 0.3.1 - Fix: only function files now have output
 - previously if a file only had a function, it would not output anything
 - also updated README and AGENTS.md

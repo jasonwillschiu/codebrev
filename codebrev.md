@@ -2,7 +2,7 @@
 
 This file provides an overview of available functions, types, and variables per file for LLM context.
 
-## internal/gitignore/gitignore.go
+## /Users/jasonchiu/Documents/GitHub/code4context-com/internal/gitignore/gitignore.go
 
 ### Functions
 - (Gitignore) ShouldIgnore(path string) -> bool
@@ -19,14 +19,14 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## internal/outline/dedup.go
+## /Users/jasonchiu/Documents/GitHub/code4context-com/internal/outline/dedup.go
 
 ### Functions
 - (Outline) RemoveDuplicates()
 
 ---
 
-## internal/outline/types.go
+## /Users/jasonchiu/Documents/GitHub/code4context-com/internal/outline/types.go
 
 ### Functions
 - (Outline) AddFile(path string) -> *FileInfo
@@ -41,7 +41,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## internal/parser/astro.go
+## /Users/jasonchiu/Documents/GitHub/code4context-com/internal/parser/astro.go
 
 ### Functions
 - isCustomComponent(tagName string) -> bool
@@ -56,7 +56,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## internal/parser/go.go
+## /Users/jasonchiu/Documents/GitHub/code4context-com/internal/parser/go.go
 
 ### Functions
 - extractFunctionInfo(d *ast.FuncDecl) -> outline.FunctionInfo
@@ -66,7 +66,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## internal/parser/parser.go
+## /Users/jasonchiu/Documents/GitHub/code4context-com/internal/parser/parser.go
 
 ### Functions
 - ProcessFiles(root string, out *outline.Outline) -> error
@@ -74,21 +74,25 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## internal/writer/writer.go
+## /Users/jasonchiu/Documents/GitHub/code4context-com/internal/writer/writer.go
 
 ### Functions
 - WriteOutlineToFile(out *outline.Outline) -> error
+- WriteOutlineToFileWithPath(out *outline.Outline, filePath string) -> error
 
 ---
 
-## main.go
+## /Users/jasonchiu/Documents/GitHub/code4context-com/main.go
 
 ### Functions
+- addGenerateCodeContextTool(s *server.MCPServer)
+- addGetCodeContextTool(s *server.MCPServer)
+- generateCodeContext(directoryPath string, outputFile string) -> error
 - main()
 
 ---
 
-## test-files/frontend4/src/components/FAQSection.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/components/FAQSection.astro
 
 ### Types
 - FAQ (fields: question: string, answer: string)
@@ -96,7 +100,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/components/FeaturesSection.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/components/FeaturesSection.astro
 
 ### Types
 - Feature (fields: title: string, description: string, icon: string)
@@ -104,14 +108,14 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/components/GoogleAnalytics.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/components/GoogleAnalytics.astro
 
 ### Types
 - EXPORTS: Props
 
 ---
 
-## test-files/frontend4/src/components/Navbar.tsx
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/components/Navbar.tsx
 
 ### Functions
 - Navbar()
@@ -126,7 +130,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/components/OptimizedImage.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/components/OptimizedImage.astro
 
 ### Types
 - COMPONENTS: Picture
@@ -134,7 +138,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/components/PricingSection.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/components/PricingSection.astro
 
 ### Types
 - PricingTier (fields: name: string, price: string, period: string, description: string, features: string[], popular?: boolean, cta: string, ctaHref: string)
@@ -142,7 +146,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/components/TestimonialsSection.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/components/TestimonialsSection.astro
 
 ### Types
 - Testimonial (fields: name: string, role: string, company?: string, content: string, avatar: string, rating: number)
@@ -150,7 +154,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/components/app/AppSummary.tsx
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/components/app/AppSummary.tsx
 
 ### Functions
 - AppSummary()
@@ -168,7 +172,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/components/app/PerplexityStyleForm.tsx
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/components/app/PerplexityStyleForm.tsx
 
 ### Functions
 - PerplexityStyleForm(props)
@@ -192,7 +196,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/components/app/ResultsDisplay.tsx
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/components/app/ResultsDisplay.tsx
 
 ### Functions
 - ResultsDisplay(props)
@@ -205,7 +209,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/components/app/SummaryDisplay.tsx
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/components/app/SummaryDisplay.tsx
 
 ### Functions
 - SummaryDisplay(props)
@@ -217,7 +221,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/components/app/TranscriptDisplay.tsx
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/components/app/TranscriptDisplay.tsx
 
 ### Functions
 - TranscriptDisplay(props)
@@ -236,7 +240,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/layouts/Base.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/layouts/Base.astro
 
 ### Types
 - COMPONENTS: GoogleAnalytics, Navbar
@@ -244,11 +248,11 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/layouts/Layout.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/layouts/Layout.astro
 
 ---
 
-## test-files/frontend4/src/layouts/MarkdownLayout.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/layouts/MarkdownLayout.astro
 
 ### Types
 - COMPONENTS: Base
@@ -257,7 +261,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/lib/api.ts
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/lib/api.ts
 
 ### Functions
 - extractVideoId(input: string) -> string | null
@@ -273,7 +277,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/lib/schema.ts
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/lib/schema.ts
 
 ### Functions
 - getLanguageDisplayName(code: Language) -> string
@@ -288,7 +292,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/pages/app.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/pages/app.astro
 
 ### Types
 - COMPONENTS: Base, AppSummary
@@ -296,7 +300,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/pages/blog/index.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/pages/blog/index.astro
 
 ### Types
 - COMPONENTS: Base
@@ -304,7 +308,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/pages/features.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/pages/features.astro
 
 ### Types
 - COMPONENTS: Base, FeaturesSection, TestimonialsSection
@@ -312,7 +316,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/pages/index.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/pages/index.astro
 
 ### Types
 - COMPONENTS: Base
@@ -320,7 +324,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/frontend4/src/pages/pricing.astro
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/frontend4/src/pages/pricing.astro
 
 ### Types
 - COMPONENTS: Base, PricingSection, TestimonialsSection, FAQSection
@@ -328,7 +332,7 @@ This file provides an overview of available functions, types, and variables per 
 
 ---
 
-## test-files/onefile/cicd1.js
+## /Users/jasonchiu/Documents/GitHub/code4context-com/test-files/onefile/cicd1.js
 
 ### Functions
 - bold(text)

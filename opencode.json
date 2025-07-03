@@ -7,6 +7,13 @@
         "./mcp-servers/docs4context-com"
       ],
       "environment": {}
+    },
+    "code-summarizer": {
+      "type": "local",
+      "command": [
+        "./mcp-servers/code4context"
+      ],
+      "environment": {}
     }
   }
 }

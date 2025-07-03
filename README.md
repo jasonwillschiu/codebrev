@@ -1,137 +1,136 @@
-# Code4Context
+# Code4Context MCP Server
 
-A tool that generates LLM-useful summaries of codebases, files, and folders to provide better context for AI assistants.
-
-## Overview
-
-Code4Context analyzes your codebase and generates a structured markdown summary (`codebrev.md`) that contains:
-
-- **Functions** with parameters and return types
-- **Types/Classes/Interfaces** with their fields and methods  
-- **Import/Export dependencies** for understanding relationships
-- **File-by-file breakdown** for easy navigation
-- **Method visibility** in both file sections and type definitions
-
-This summary is optimized for LLM consumption, helping AI assistants understand your codebase structure quickly.
-
-## Supported Languages
-
-- **Go** (.go files) - Full AST parsing with complete type information and method visibility
-- **JavaScript** (.js, .jsx files) - Regex-based parsing optimized for LLM context
-- **TypeScript** (.ts, .tsx files) - Regex-based parsing with interface and type support
-- **Astro** (.astro files) - Custom parser for component and TypeScript extraction
-
-## Installation
-
-```bash
-go build -o code4context main.go
-```
-
-## Usage
-
-### Analyze current directory
-```bash
-./code4context
-```
-
-### Analyze specific directory
-```bash
-./code4context /path/to/your/project
-```
-
-### Analyze single file
-```bash
-./code4context /path/to/file.go
-```
-
-## Output
-
-The tool generates `codebrev.md` with a structured overview:
-
-```markdown
-# Code Structure Outline
-
-## main.go
-
-### Functions
-- (Outline) RemoveDuplicates()
-- main()
-- processFile(path string, info os.FileInfo, out *outline, fset *token.FileSet) -> error
-
-### Types
-- Outline (methods: RemoveDuplicates, EnsureType, AddFile) (fields: Files, Types, Vars, Funcs)
-- FileInfo (fields: Path, Functions, Types, Vars)
-
----
-
-## src/components/App.tsx
-
-### Functions
-- App()
-- handleSubmit()
-- validateInput()
-
-### Types
-- IMPORTS: React, useState, useEffect, axios
-
-### Variables
-- DEFAULT_CONFIG
-
----
-
-## lib/utils.js
-
-### Functions
-- formatDate()
-- debounce()
-- throttle()
-
-### Types
-- IMPORTS: lodash, moment
-- EXPORTS: formatDate, debounce, throttle
-```
-
-## Architecture
-
-### Parsing Engine
-- **Go Parser**: Native AST parsing using `go/ast` for complete type information and method visibility
-- **Regex Parser**: Optimized regex-based parsing for JavaScript, TypeScript, and JSX (tree-sitter removed)
-- **Astro Parser**: Custom parser for Astro components with TypeScript extraction
-- **Robust Error Handling**: Graceful degradation when parsing fails
-
-### Smart Filtering
-- **Test File Exclusion**: Automatically skips `*_test.go`, `*.test.js`, `*.spec.js`
-- **Variable Filtering**: Variables and constants removed (focus on functions, types, imports)
-- **Duplicate Removal**: Ensures clean, deduplicated output across files
-- **LLM-Optimized Content**: Focuses on functions, types, and imports for better context
-
-### Output Optimization
-- **LLM-Structured Format**: Hierarchical markdown optimized for AI consumption
-- **Import/Export Tracking**: Captures dependencies and component relationships
-- **Cross-Language Consistency**: Unified format across different programming languages
-- **File-by-File Organization**: Clear separation for easy navigation
+An MCP (Model Context Protocol) server that provides code context generation and caching tools for AI agents. This server integrates the code4context functionality with a cache pattern - it checks for existing `codebrev.md` files first, and generates them if they don't exist.
 
 ## Features
 
-- **Multi-language Support**: Go, JavaScript, TypeScript, JSX, TSX, and Astro files
-- **Dependency Mapping**: Tracks imports, exports, and component relationships
-- **Type Information**: Captures classes, interfaces, structs with methods and fields
-- **Function Signatures**: Extracts parameters and return types where available
-- **Smart Filtering**: Excludes noise while preserving meaningful code structure
-- **Error Resilience**: Continues processing even when individual files fail to parse
+- **Cache Pattern**: Checks for existing `codebrev.md` files before generating new ones
+- **Two Main Tools**:
+  - `generate_code_context`: Force generate a new `codebrev.md` file
+  - `get_code_context`: Get cached `codebrev.md` or generate if missing
+- **MCP Compatible**: Works with Claude, Cursor, Windsurf, OpenCode, and other MCP clients
 
-## Future Enhancements
+## Tools
 
-- **Mermaid Diagrams**: Visual representation of file dependencies and imports
-- **Call Graph Analysis**: Function usage and relationship mapping
-- **Module Visualization**: Package/namespace organization charts
-- **API Documentation**: Auto-generated docs from extracted signatures
+### generate_code_context
 
-## Contributing
+Generates a `codebrev.md` file containing code structure outline for the specified directory.
 
-This tool is designed to improve LLM understanding of codebases. Contributions welcome for:
+**Parameters:**
+- `directory_path` (required): Path to the directory to analyze
+- `output_file` (optional): Output file path (defaults to 'codebrev.md' in the target directory)
 
-- Additional language support
-- Better parsing accuracy
-- Diagram generation features
-- Output format improvements
+### get_code_context
+
+Gets cached `codebrev.md` file content, or generates it if it doesn't exist (cache pattern).
+
+**Parameters:**
+- `directory_path` (required): Path to the directory to get context for
+- `cache_file` (optional): Path to the cache file (defaults to 'codebrev.md' in the target directory)
+- `force_regenerate` (optional): Force regeneration even if cache file exists (defaults to false)
+
+## Installation
+
+1. Build the server:
+```bash
+cd /path/to/code4context-com
+go build -o mcp-server/code4context-mcp ./mcp-server
+```
+
+2. Make it executable and add to PATH (optional):
+```bash
+chmod +x mcp-server/code4context-mcp
+# Optionally copy to a directory in your PATH
+```
+
+## Configuration
+
+### Claude Desktop
+
+Add to your Claude Desktop configuration:
+
+```json
+{
+  "mcpServers": {
+    "code4context": {
+      "command": "/path/to/code4context-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+### Cursor
+
+Add to your `mcp.json` configuration:
+
+```json
+{
+  "mcpServers": {
+    "code4context": {
+      "command": "/path/to/code4context-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+### OpenCode
+
+Add to your `opencode.json` configuration:
+
+```json
+{
+  "mcp": {
+    "code4context": {
+      "type": "local",
+      "command": ["/path/to/code4context-mcp"],
+      "environment": {}
+    }
+  }
+}
+```
+
+## Usage Examples
+
+Once configured with your MCP client, you can use commands like:
+
+- "Generate code context for the current directory"
+- "Get the code context for this project (use cache if available)"
+- "Force regenerate the code context for /path/to/project"
+
+## Cache Pattern
+
+The server implements a smart cache pattern:
+
+1. **get_code_context** first checks if `codebrev.md` exists in the target directory
+2. If it exists and `force_regenerate` is false, it returns the cached content
+3. If it doesn't exist or `force_regenerate` is true, it generates a new one
+4. **generate_code_context** always generates a new file, overwriting any existing one
+
+This approach provides:
+- **Performance**: Avoids regenerating unchanged codebases
+- **Freshness**: Easy to force updates when needed
+- **Flexibility**: Can specify custom cache file locations
+
+## Development
+
+The server is built on top of the existing code4context functionality:
+- Uses the same parser and writer modules
+- Integrates with `mark3labs/mcp-go` for MCP protocol support
+- Maintains compatibility with the original CLI tool
+
+## Troubleshooting
+
+### Server Not Starting
+- Check that the binary is executable: `chmod +x code4context-mcp`
+- Verify the path in your MCP client configuration
+- Check logs in your MCP client for connection errors
+
+### Tools Not Working
+- Ensure the directory path exists and is accessible
+- Check file permissions for writing `codebrev.md`
+- Use `--help` to verify tool parameters
+
+### Debug Mode
+The server logs to stderr, so you can see debug information in your MCP client logs.
