@@ -229,37 +229,125 @@ async function buildCrossPlatform(version = null) {
     await $`rm -rf bin/*`.nothrow();
     await $`mkdir -p bin`.throws(true);
 
-    // Get build info
-    const buildDate = new Date().toISOString();
-    const gitCommitResult = await $`git rev-parse --short HEAD`.nothrow();
-    const gitCommit = gitCommitResult.exitCode === 0 ? gitCommitResult.stdout.toString().trim() : 'unknown';
-    const buildVersion = version || 'dev';
+    // Check if we need to build by comparing hashes
+    mainSpinner.update({ text: '🔍 Checking if binaries need rebuilding...' });
+    
+    // Check required environment variables for R2 access
+    const requiredEnvVars = ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME', 'R2_ENDPOINT'];
+    const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+    const canCheckR2 = missingVars.length === 0;
+    
+    let needsBuild = false;
+    const reusableFiles = new Map();
+    
+    if (canCheckR2) {
+      const awsEnv = {
+        ...process.env,
+        AWS_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+        AWS_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
+        AWS_DEFAULT_REGION: 'auto'
+      };
+      
+      const bucket = process.env.R2_BUCKET_NAME;
+      const endpoint = process.env.R2_ENDPOINT;
+      
+      // Check each platform
+      for (const platform of platforms) {
+        const platformKey = platform.name.replace('code4context-', '').replace('.exe', '');
+        const hash = await calculateContentHash(platformKey);
+        const binaryExists = await checkExistingBinary(hash, awsEnv, bucket, endpoint);
+        
+        if (binaryExists) {
+          reusableFiles.set(platform.name, hash);
+          mainSpinner.update({ text: `♻️  Found existing binary for ${platform.name}` });
+        } else {
+          needsBuild = true;
+        }
+      }
+    } else {
+      // If we can't check R2, we need to build
+      needsBuild = true;
+      mainSpinner.update({ text: '⚠️  Cannot check R2 for existing binaries, will build all' });
+    }
 
-    // Build for each platform
-    for (const platform of platforms) {
-      mainSpinner.update({ text: `🔨 Building ${platform.name}...` });
-
-      // Create ldflags for build info
-      const ldflags = generateLdflags(buildVersion, buildDate, gitCommit);
-
-      // Quote the ldflags string so it is passed as a single argument
-      const buildResult = await $`go build -ldflags "${ldflags}" -o bin/${platform.name} .`
-        .env({
+    if (!needsBuild && reusableFiles.size === platforms.length) {
+      mainSpinner.success({ text: green(`♻️  All binaries can be reused, skipping build`) });
+      
+      // Download existing binaries from R2 for version-specific uploads
+      if (canCheckR2) {
+        const awsEnv = {
           ...process.env,
-          GOOS: platform.os,
-          GOARCH: platform.arch,
-          CGO_ENABLED: '0'
-        })
-        .nothrow();
-
-      if (buildResult.exitCode !== 0) {
-        mainSpinner.error({ text: red(`❌ Failed to build ${platform.name}`) });
-        console.error(red(buildResult.stderr.toString()));
-        throw new Error(`Build failed for ${platform.name}`);
+          AWS_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+          AWS_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
+          AWS_DEFAULT_REGION: 'auto'
+        };
+        
+        const bucket = process.env.R2_BUCKET_NAME;
+        const endpoint = process.env.R2_ENDPOINT;
+        
+        for (const platform of platforms) {
+          const hash = reusableFiles.get(platform.name);
+          if (hash) {
+            mainSpinner.update({ text: `📥 Downloading ${platform.name} from R2...` });
+            const downloadResult = await $`aws s3 cp s3://${bucket}/binaries/code4context-${hash} bin/${platform.name} --endpoint-url ${endpoint}`
+              .env(awsEnv)
+              .nothrow();
+              
+            if (downloadResult.exitCode !== 0) {
+              mainSpinner.warn({ text: yellow(`⚠️  Failed to download ${platform.name}, will build instead`) });
+              needsBuild = true;
+              break;
+            }
+          }
+        }
       }
     }
 
-    mainSpinner.success({ text: green(`✅ Built ${platforms.length} binaries successfully`) });
+    if (needsBuild) {
+      // Get build info
+      const buildDate = new Date().toISOString();
+      const gitCommitResult = await $`git rev-parse --short HEAD`.nothrow();
+      const gitCommit = gitCommitResult.exitCode === 0 ? gitCommitResult.stdout.toString().trim() : 'unknown';
+      const buildVersion = version || 'dev';
+
+      // Build for each platform that needs building
+      for (const platform of platforms) {
+        if (reusableFiles.has(platform.name)) {
+          mainSpinner.update({ text: `♻️  Skipping ${platform.name} (reusing existing)` });
+          continue;
+        }
+        
+        mainSpinner.update({ text: `🔨 Building ${platform.name}...` });
+
+        // Create ldflags for build info
+        const ldflags = generateLdflags(buildVersion, buildDate, gitCommit);
+
+        // Quote the ldflags string so it is passed as a single argument
+        const buildResult = await $`go build -ldflags "${ldflags}" -o bin/${platform.name} .`
+          .env({
+            ...process.env,
+            GOOS: platform.os,
+            GOARCH: platform.arch,
+            CGO_ENABLED: '0'
+          })
+          .nothrow();
+
+        if (buildResult.exitCode !== 0) {
+          mainSpinner.error({ text: red(`❌ Failed to build ${platform.name}`) });
+          console.error(red(buildResult.stderr.toString()));
+          throw new Error(`Build failed for ${platform.name}`);
+        }
+      }
+    }
+
+    const builtCount = platforms.length - reusableFiles.size;
+    const reusedCount = reusableFiles.size;
+    
+    if (builtCount > 0) {
+      mainSpinner.success({ text: green(`✅ Built ${builtCount} binaries successfully (${reusedCount} reused)`) });
+    } else {
+      mainSpinner.success({ text: green(`✅ All ${platforms.length} binaries reused from existing builds`) });
+    }
 
     // List built files
     console.log(cyan('📦 Built binaries:'));
@@ -553,6 +641,16 @@ async function uploadToR2(version) {
           binary_url: `${baseUrl}/binaries/code4context-${hash}`,
           reused: true
         };
+        
+        // Copy existing binary to version-specific path (much faster than re-uploading)
+        spinner.update({ text: `📋 Creating version-specific reference for ${file}...` });
+        const copyResult = await $`aws s3 cp s3://${bucket}/binaries/code4context-${hash} s3://${bucket}/${versionPath}/${file} --endpoint-url ${endpoint}`
+          .env(awsEnv)
+          .nothrow();
+
+        if (copyResult.exitCode !== 0) {
+          throw new Error(`Failed to copy version-specific ${file}: ${copyResult.stderr.toString()}`);
+        }
       } else {
         spinner.update({ text: `📤 Uploading new binary ${file}...` });
         
@@ -573,16 +671,16 @@ async function uploadToR2(version) {
           binary_url: `${baseUrl}/binaries/code4context-${hash}`,
           reused: false
         };
-      }
+        
+        // Also upload to version-specific path for backward compatibility
+        spinner.update({ text: `📋 Creating version-specific reference for ${file}...` });
+        const versionUploadResult = await $`aws s3 cp ${filePath} s3://${bucket}/${versionPath}/${file} --endpoint-url ${endpoint}`
+          .env(awsEnv)
+          .nothrow();
 
-      // Also upload to version-specific path for backward compatibility
-      spinner.update({ text: `📋 Creating version-specific reference for ${file}...` });
-      const versionUploadResult = await $`aws s3 cp ${filePath} s3://${bucket}/${versionPath}/${file} --endpoint-url ${endpoint}`
-        .env(awsEnv)
-        .nothrow();
-
-      if (versionUploadResult.exitCode !== 0) {
-        throw new Error(`Failed to upload version-specific ${file}: ${versionUploadResult.stderr.toString()}`);
+        if (versionUploadResult.exitCode !== 0) {
+          throw new Error(`Failed to upload version-specific ${file}: ${versionUploadResult.stderr.toString()}`);
+        }
       }
     }
 
