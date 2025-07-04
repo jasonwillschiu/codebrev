@@ -1,12 +1,12 @@
 {
-  "last_updated": "2025-07-05T00:00:00.000Z",
-  "latest_version": "0.4.10",
+  "last_updated": "2025-07-04T15:24:55.595Z",
+  "latest_version": "0.4.12",
   "binary_sources": {
-    "darwin-amd64": "0.4.8",
-    "darwin-arm64": "0.4.8",
-    "linux-amd64": "0.4.8",
-    "linux-arm64": "0.4.8",
-    "windows-amd64.exe": "0.4.8",
-    "windows-arm64.exe": "0.4.8"
+    "darwin-amd64": "0.4.9",
+    "darwin-arm64": "0.4.9",
+    "linux-amd64": "0.4.9",
+    "linux-arm64": "0.4.9",
+    "windows-amd64.exe": "0.4.9",
+    "windows-arm64.exe": "0.4.9"
   }
 }

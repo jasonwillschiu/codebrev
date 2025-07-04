@@ -1,3 +1,6 @@
+# 0.4.12 - Fix: cicd.js using binary-mapping.json
+- 0.4.11 wouldn't install still, references releases/v0.4.11 where there is no binary
+
 # 0.4.11 - Update: cicd.js using binary-mapping.json as source of truth
 - previously still referencing metadata.json
 - now only using binary-mapping.json to find binaries

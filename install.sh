@@ -169,9 +169,10 @@ get_optimal_source_version() {
         mapping=$(get_binary_mapping)
         
         if [[ -n "$mapping" ]]; then
-            # Use grep and cut for more reliable parsing
+            # Parse the binary_sources object to find the platform's source version
             local source_version
-            source_version=$(echo "$mapping" | grep -o "\"$platform\":\"[^\"]*\"" | cut -d'"' -f4 2>/dev/null)
+            # Look for "platform": "version" pattern (with possible spaces) within the binary_sources object
+            source_version=$(echo "$mapping" | grep -A 20 '"binary_sources"' | grep -o "\"$platform\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | sed 's/.*"\([^"]*\)"/\1/' 2>/dev/null)
             
             if [[ -n "$source_version" ]]; then
                 log_info "Found optimal source version for $platform: v$source_version" >&2

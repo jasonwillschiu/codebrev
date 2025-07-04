@@ -1061,6 +1061,10 @@ if (mode === 'dev') {
         }
       }
 
+      if (shouldUploadR2) {
+        await uploadToR2(version, skipBuild);
+      }
+
       if (shouldCommit) {
         await checkGitStatus();
         await gitAdd();
@@ -1078,10 +1082,6 @@ if (mode === 'dev') {
 
       if (shouldRelease) {
         await createGitHubRelease(version, summary, description);
-      }
-
-      if (shouldUploadR2) {
-        await uploadToR2(version, skipBuild);
       }
     }
 
