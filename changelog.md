@@ -1,3 +1,9 @@
+# 0.4.7 - Update: cicd.js binary reuse 4
+- Single storage location: Only /releases/v{version}/ - eliminated /binaries/ folder entirely
+- Content-based hashing: Calculate hash of all Go source files (not per-platform)
+- Smart build skipping: If content hash matches previous version, skip building entirely
+- Fast S3 copies: When reusing, copy binaries directly in R2 (no local download/upload)
+
 # 0.4.6 - Update: cicd.js binary reuse, again
 - modified buildCrossPlatform(), checking content hash before building
 

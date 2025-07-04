@@ -229,125 +229,37 @@ async function buildCrossPlatform(version = null) {
     await $`rm -rf bin/*`.nothrow();
     await $`mkdir -p bin`.throws(true);
 
-    // Check if we need to build by comparing hashes
-    mainSpinner.update({ text: '🔍 Checking if binaries need rebuilding...' });
-    
-    // Check required environment variables for R2 access
-    const requiredEnvVars = ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME', 'R2_ENDPOINT'];
-    const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-    const canCheckR2 = missingVars.length === 0;
-    
-    let needsBuild = false;
-    const reusableFiles = new Map();
-    
-    if (canCheckR2) {
-      const awsEnv = {
-        ...process.env,
-        AWS_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
-        AWS_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
-        AWS_DEFAULT_REGION: 'auto'
-      };
-      
-      const bucket = process.env.R2_BUCKET_NAME;
-      const endpoint = process.env.R2_ENDPOINT;
-      
-      // Check each platform
-      for (const platform of platforms) {
-        const platformKey = platform.name.replace('code4context-', '').replace('.exe', '');
-        const hash = await calculateContentHash(platformKey);
-        const binaryExists = await checkExistingBinary(hash, awsEnv, bucket, endpoint);
-        
-        if (binaryExists) {
-          reusableFiles.set(platform.name, hash);
-          mainSpinner.update({ text: `♻️  Found existing binary for ${platform.name}` });
-        } else {
-          needsBuild = true;
-        }
-      }
-    } else {
-      // If we can't check R2, we need to build
-      needsBuild = true;
-      mainSpinner.update({ text: '⚠️  Cannot check R2 for existing binaries, will build all' });
-    }
+    // Get build info
+    const buildDate = new Date().toISOString();
+    const gitCommitResult = await $`git rev-parse --short HEAD`.nothrow();
+    const gitCommit = gitCommitResult.exitCode === 0 ? gitCommitResult.stdout.toString().trim() : 'unknown';
+    const buildVersion = version || 'dev';
 
-    if (!needsBuild && reusableFiles.size === platforms.length) {
-      mainSpinner.success({ text: green(`♻️  All binaries can be reused, skipping build`) });
-      
-      // Download existing binaries from R2 for version-specific uploads
-      if (canCheckR2) {
-        const awsEnv = {
+    // Build for each platform
+    for (const platform of platforms) {
+      mainSpinner.update({ text: `🔨 Building ${platform.name}...` });
+
+      // Create ldflags for build info
+      const ldflags = generateLdflags(buildVersion, buildDate, gitCommit);
+
+      // Quote the ldflags string so it is passed as a single argument
+      const buildResult = await $`go build -ldflags "${ldflags}" -o bin/${platform.name} .`
+        .env({
           ...process.env,
-          AWS_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
-          AWS_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
-          AWS_DEFAULT_REGION: 'auto'
-        };
-        
-        const bucket = process.env.R2_BUCKET_NAME;
-        const endpoint = process.env.R2_ENDPOINT;
-        
-        for (const platform of platforms) {
-          const hash = reusableFiles.get(platform.name);
-          if (hash) {
-            mainSpinner.update({ text: `📥 Downloading ${platform.name} from R2...` });
-            const downloadResult = await $`aws s3 cp s3://${bucket}/binaries/code4context-${hash} bin/${platform.name} --endpoint-url ${endpoint}`
-              .env(awsEnv)
-              .nothrow();
-              
-            if (downloadResult.exitCode !== 0) {
-              mainSpinner.warn({ text: yellow(`⚠️  Failed to download ${platform.name}, will build instead`) });
-              needsBuild = true;
-              break;
-            }
-          }
-        }
+          GOOS: platform.os,
+          GOARCH: platform.arch,
+          CGO_ENABLED: '0'
+        })
+        .nothrow();
+
+      if (buildResult.exitCode !== 0) {
+        mainSpinner.error({ text: red(`❌ Failed to build ${platform.name}`) });
+        console.error(red(buildResult.stderr.toString()));
+        throw new Error(`Build failed for ${platform.name}`);
       }
     }
 
-    if (needsBuild) {
-      // Get build info
-      const buildDate = new Date().toISOString();
-      const gitCommitResult = await $`git rev-parse --short HEAD`.nothrow();
-      const gitCommit = gitCommitResult.exitCode === 0 ? gitCommitResult.stdout.toString().trim() : 'unknown';
-      const buildVersion = version || 'dev';
-
-      // Build for each platform that needs building
-      for (const platform of platforms) {
-        if (reusableFiles.has(platform.name)) {
-          mainSpinner.update({ text: `♻️  Skipping ${platform.name} (reusing existing)` });
-          continue;
-        }
-        
-        mainSpinner.update({ text: `🔨 Building ${platform.name}...` });
-
-        // Create ldflags for build info
-        const ldflags = generateLdflags(buildVersion, buildDate, gitCommit);
-
-        // Quote the ldflags string so it is passed as a single argument
-        const buildResult = await $`go build -ldflags "${ldflags}" -o bin/${platform.name} .`
-          .env({
-            ...process.env,
-            GOOS: platform.os,
-            GOARCH: platform.arch,
-            CGO_ENABLED: '0'
-          })
-          .nothrow();
-
-        if (buildResult.exitCode !== 0) {
-          mainSpinner.error({ text: red(`❌ Failed to build ${platform.name}`) });
-          console.error(red(buildResult.stderr.toString()));
-          throw new Error(`Build failed for ${platform.name}`);
-        }
-      }
-    }
-
-    const builtCount = platforms.length - reusableFiles.size;
-    const reusedCount = reusableFiles.size;
-    
-    if (builtCount > 0) {
-      mainSpinner.success({ text: green(`✅ Built ${builtCount} binaries successfully (${reusedCount} reused)`) });
-    } else {
-      mainSpinner.success({ text: green(`✅ All ${platforms.length} binaries reused from existing builds`) });
-    }
+    mainSpinner.success({ text: green(`✅ Built ${platforms.length} binaries successfully`) });
 
     // List built files
     console.log(cyan('📦 Built binaries:'));
@@ -522,14 +434,11 @@ async function buildLocal() {
 }
 
 /** Calculates content hash based on Go source files that affect the binary */
-async function calculateContentHash(platform) {
+async function calculateContentHash() {
   // Hash only the files that actually affect the Go binary compilation
   // This excludes README, docs, install scripts, etc.
   
   const hasher = new Bun.CryptoHasher("sha256");
-  
-  // Hash platform (since different platforms may have different binaries)
-  hasher.update(new TextEncoder().encode(platform));
   
   // Get list of Go source files
   const goFilesResult = await $`find . -name "*.go" -not -path "./test-files/*" | sort`.nothrow();
@@ -568,17 +477,39 @@ async function calculateContentHash(platform) {
   return hasher.digest("hex");
 }
 
-/** Checks if a binary with the same hash already exists in R2 */
-async function checkExistingBinary(hash, awsEnv, bucket, endpoint) {
-  const binaryPath = `binaries/code4context-${hash}`;
-  const checkResult = await $`aws s3 ls s3://${bucket}/${binaryPath} --endpoint-url ${endpoint}`
-    .env(awsEnv)
-    .nothrow();
-  
-  return checkResult.exitCode === 0;
+/** Gets the latest version's metadata to check for hash matches */
+async function getLatestVersionMetadata(awsEnv, bucket, endpoint) {
+  try {
+    // Get latest version
+    const latestResult = await $`aws s3 cp s3://${bucket}/latest-version.txt - --endpoint-url ${endpoint}`
+      .env(awsEnv)
+      .nothrow();
+    
+    if (latestResult.exitCode !== 0) {
+      return null; // No previous version
+    }
+    
+    const latestVersion = latestResult.stdout.toString().trim();
+    
+    // Get metadata for latest version
+    const metadataResult = await $`aws s3 cp s3://${bucket}/releases/v${latestVersion}/metadata.json - --endpoint-url ${endpoint}`
+      .env(awsEnv)
+      .nothrow();
+    
+    if (metadataResult.exitCode !== 0) {
+      return null; // No metadata found
+    }
+    
+    return {
+      version: latestVersion,
+      metadata: JSON.parse(metadataResult.stdout.toString())
+    };
+  } catch (e) {
+    return null;
+  }
 }
 
-/** Uploads binaries to Cloudflare R2 with hash-based deduplication */
+/** Uploads binaries to Cloudflare R2 with smart reuse from previous versions */
 async function uploadToR2(version) {
   const spinner = createBunSpinner(`☁️ Uploading binaries to Cloudflare R2...`).start();
 
@@ -611,52 +542,69 @@ async function uploadToR2(version) {
       AWS_DEFAULT_REGION: 'auto'
     };
 
-    // Get binary files
-    const binFiles = await $`ls bin/`.env(awsEnv).nothrow();
-    if (binFiles.exitCode !== 0) {
-      throw new Error('No binaries found in bin/ directory');
+    // Calculate current content hash
+    spinner.update({ text: `🔍 Calculating content hash...` });
+    const currentHash = await calculateContentHash();
+
+    // Check if we can reuse binaries from the latest version
+    spinner.update({ text: `🔍 Checking for reusable binaries...` });
+    const latestVersionData = await getLatestVersionMetadata(awsEnv, bucket, endpoint);
+    
+    const platforms = [
+      'darwin-amd64', 'darwin-arm64', 'linux-amd64', 
+      'linux-arm64', 'windows-amd64.exe', 'windows-arm64.exe'
+    ];
+
+    let canReuseAll = false;
+    let sourceVersion = null;
+
+    if (latestVersionData && latestVersionData.metadata.content_hash === currentHash) {
+      canReuseAll = true;
+      sourceVersion = latestVersionData.version;
+      spinner.update({ text: `♻️  Content unchanged, reusing all binaries from v${sourceVersion}` });
     }
 
-    const files = binFiles.stdout.toString().trim().split('\n').filter(f => f.trim());
-    const metadata = {};
+    const metadata = {
+      version: version,
+      created_at: new Date().toISOString(),
+      content_hash: currentHash,
+      binaries: {}
+    };
 
-    // Process each binary with hash-based deduplication
-    for (const file of files) {
-      spinner.update({ text: `🔍 Processing ${file}...` });
-
-      const filePath = `bin/${file}`;
-      const platform = file.replace('code4context-', '').replace('.exe', '');
-      const hash = await calculateContentHash(platform);
-      
-      // Check if binary with this hash already exists
-      const binaryExists = await checkExistingBinary(hash, awsEnv, bucket, endpoint);
-      
-      if (binaryExists) {
-        spinner.update({ text: `♻️  Reusing existing binary for ${file} (hash: ${hash.substring(0, 8)}...)` });
+    if (canReuseAll) {
+      // Fast path: Copy all binaries from previous version
+      for (const platform of platforms) {
+        const fileName = `code4context-${platform}`;
+        spinner.update({ text: `📋 Copying ${fileName} from v${sourceVersion}...` });
         
-        // Create metadata entry pointing to existing binary
-        const baseUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.${endpoint.replace('https://', '')}`;
-        metadata[platform] = {
-          hash: hash,
-          binary_url: `${baseUrl}/binaries/code4context-${hash}`,
-          reused: true
-        };
-        
-        // Copy existing binary to version-specific path (much faster than re-uploading)
-        spinner.update({ text: `📋 Creating version-specific reference for ${file}...` });
-        const copyResult = await $`aws s3 cp s3://${bucket}/binaries/code4context-${hash} s3://${bucket}/${versionPath}/${file} --endpoint-url ${endpoint}`
+        const copyResult = await $`aws s3 cp s3://${bucket}/releases/v${sourceVersion}/${fileName} s3://${bucket}/${versionPath}/${fileName} --endpoint-url ${endpoint}`
           .env(awsEnv)
           .nothrow();
 
         if (copyResult.exitCode !== 0) {
-          throw new Error(`Failed to copy version-specific ${file}: ${copyResult.stderr.toString()}`);
+          throw new Error(`Failed to copy ${fileName}: ${copyResult.stderr.toString()}`);
         }
-      } else {
-        spinner.update({ text: `📤 Uploading new binary ${file}...` });
-        
-        // Upload to hash-based location
-        const hashBinaryPath = `binaries/code4context-${hash}`;
-        const uploadResult = await $`aws s3 cp ${filePath} s3://${bucket}/${hashBinaryPath} --endpoint-url ${endpoint}`
+
+        const baseUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.${endpoint.replace('https://', '')}`;
+        metadata.binaries[platform] = {
+          url: `${baseUrl}/${versionPath}/${fileName}`,
+          reused_from: sourceVersion
+        };
+      }
+    } else {
+      // Need to build and upload new binaries
+      const binFiles = await $`ls bin/`.env(awsEnv).nothrow();
+      if (binFiles.exitCode !== 0) {
+        throw new Error('No binaries found in bin/ directory');
+      }
+
+      const files = binFiles.stdout.toString().trim().split('\n').filter(f => f.trim());
+
+      for (const file of files) {
+        spinner.update({ text: `📤 Uploading ${file}...` });
+
+        const filePath = `bin/${file}`;
+        const uploadResult = await $`aws s3 cp ${filePath} s3://${bucket}/${versionPath}/${file} --endpoint-url ${endpoint}`
           .env(awsEnv)
           .nothrow();
 
@@ -664,37 +612,19 @@ async function uploadToR2(version) {
           throw new Error(`Failed to upload ${file}: ${uploadResult.stderr.toString()}`);
         }
 
-        // Create metadata entry
+        const platform = file.replace('code4context-', '');
         const baseUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.${endpoint.replace('https://', '')}`;
-        metadata[platform] = {
-          hash: hash,
-          binary_url: `${baseUrl}/binaries/code4context-${hash}`,
-          reused: false
+        metadata.binaries[platform] = {
+          url: `${baseUrl}/${versionPath}/${file}`,
+          newly_built: true
         };
-        
-        // Also upload to version-specific path for backward compatibility
-        spinner.update({ text: `📋 Creating version-specific reference for ${file}...` });
-        const versionUploadResult = await $`aws s3 cp ${filePath} s3://${bucket}/${versionPath}/${file} --endpoint-url ${endpoint}`
-          .env(awsEnv)
-          .nothrow();
-
-        if (versionUploadResult.exitCode !== 0) {
-          throw new Error(`Failed to upload version-specific ${file}: ${versionUploadResult.stderr.toString()}`);
-        }
       }
     }
 
-    // Create and upload metadata.json
+    // Upload metadata
     spinner.update({ text: `📋 Creating metadata.json...` });
-
-    const metadataContent = {
-      version: version,
-      created_at: new Date().toISOString(),
-      binaries: metadata
-    };
-
     const metadataFile = `metadata-${version}.json`;
-    await fs.writeFile(metadataFile, JSON.stringify(metadataContent, null, 2));
+    await fs.writeFile(metadataFile, JSON.stringify(metadata, null, 2));
 
     const metadataUploadResult = await $`aws s3 cp ${metadataFile} s3://${bucket}/${versionPath}/metadata.json --endpoint-url ${endpoint}`
       .env(awsEnv)
@@ -704,9 +634,8 @@ async function uploadToR2(version) {
       throw new Error(`Failed to upload metadata: ${metadataUploadResult.stderr.toString()}`);
     }
 
-    // Upload latest version marker
+    // Update latest version marker
     spinner.update({ text: `📝 Updating latest version marker...` });
-
     const versionFile = `latest-version.txt`;
     await fs.writeFile(versionFile, version);
 
@@ -720,7 +649,6 @@ async function uploadToR2(version) {
 
     // Upload install script
     spinner.update({ text: `📜 Uploading install script...` });
-
     const installScriptResult = await $`aws s3 cp install.sh s3://${bucket}/install.sh --endpoint-url ${endpoint}`
       .env(awsEnv)
       .nothrow();
@@ -734,31 +662,16 @@ async function uploadToR2(version) {
 
     spinner.success({ text: green(`✅ Binaries uploaded to R2 successfully`) });
 
-    // Show download URLs and reuse statistics
+    // Show results
     const baseUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.${endpoint.replace('https://', '')}`;
-    console.log(cyan(`🔗 Binaries available at: ${baseUrl}/${versionPath}/`));
-    console.log(cyan(`🔗 Metadata available at: ${baseUrl}/${versionPath}/metadata.json`));
-    console.log(cyan(`🔗 Install script available at: ${baseUrl}/install.sh`));
+    console.log(cyan(`🔗 Release available at: ${baseUrl}/${versionPath}/`));
+    console.log(cyan(`🔗 Install script: ${baseUrl}/install.sh`));
 
-    // Show reuse statistics
-    const reusedCount = Object.values(metadata).filter(m => m.reused).length;
-    const newCount = Object.values(metadata).filter(m => !m.reused).length;
-    console.log(cyan(`♻️  Binary reuse: ${reusedCount} reused, ${newCount} new`));
-
-    // List uploaded files
-    console.log(cyan('📦 Version-specific files:'));
-    files.forEach(file => {
-      console.log(`  ${baseUrl}/${versionPath}/${file}`);
-    });
-    console.log(`  ${baseUrl}/${versionPath}/metadata.json`);
-    console.log(`  ${baseUrl}/install.sh`);
-
-    // List optimized binary URLs
-    console.log(cyan('🚀 Optimized binary URLs:'));
-    Object.entries(metadata).forEach(([platform, meta]) => {
-      const status = meta.reused ? '♻️  (reused)' : '🆕 (new)';
-      console.log(`  ${platform}: ${meta.binary_url} ${status}`);
-    });
+    if (canReuseAll) {
+      console.log(cyan(`♻️  All binaries reused from v${sourceVersion} (content hash: ${currentHash.substring(0, 8)}...)`));
+    } else {
+      console.log(cyan(`🆕 All binaries newly built (content hash: ${currentHash.substring(0, 8)}...)`));
+    }
 
   } catch (error) {
     if (spinner.isSpinning()) {
@@ -892,7 +805,37 @@ if (mode === 'dev') {
       const { version, summary, description } = changelogData;
 
       if (shouldBuild) {
-        await buildCrossPlatform(version);
+        // Check if we need to build by comparing content hash with latest version
+        if (shouldUploadR2) {
+          const requiredEnvVars = ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME', 'R2_ENDPOINT'];
+          const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+          
+          if (missingVars.length === 0) {
+            const awsEnv = {
+              ...process.env,
+              AWS_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+              AWS_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
+              AWS_DEFAULT_REGION: 'auto'
+            };
+            
+            const bucket = process.env.R2_BUCKET_NAME;
+            const endpoint = process.env.R2_ENDPOINT;
+            
+            console.log(cyan('🔍 Checking if build is needed...'));
+            const currentHash = await calculateContentHash();
+            const latestVersionData = await getLatestVersionMetadata(awsEnv, bucket, endpoint);
+            
+            if (latestVersionData && latestVersionData.metadata.content_hash === currentHash) {
+              console.log(green(`♻️  Content unchanged (hash: ${currentHash.substring(0, 8)}...), skipping build`));
+            } else {
+              await buildCrossPlatform(version);
+            }
+          } else {
+            await buildCrossPlatform(version);
+          }
+        } else {
+          await buildCrossPlatform(version);
+        }
       }
 
       if (shouldCommit) {
