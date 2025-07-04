@@ -1,4 +1,8 @@
-# 0.4.2 - update: install.sh interactive TTY
+# 0.4.3 - Fix: install.sh
+- removed "-e" prefix
+- binary reuse if it didn't change
+
+# 0.4.2 - Update: install.sh interactive TTY
 - uses TTY redirection to make piped installation interactive
 - cicd.js fix for --help error
 

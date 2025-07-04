@@ -24,23 +24,23 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 log_info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
+    printf "${BLUE}ℹ️  %s${NC}\n" "$1"
 }
 
 log_success() {
-    echo -e "${GREEN}✅ $1${NC}"
+    printf "${GREEN}✅ %s${NC}\n" "$1"
 }
 
 log_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
+    printf "${YELLOW}⚠️  %s${NC}\n" "$1"
 }
 
 log_error() {
-    echo -e "${RED}❌ $1${NC}"
+    printf "${RED}❌ %s${NC}\n" "$1"
 }
 
 log_prompt() {
-    echo -e "${CYAN}❓ $1${NC}"
+    printf "${CYAN}❓ %s${NC}\n" "$1"
 }
 
 # Check if running non-interactively
@@ -121,6 +121,22 @@ get_latest_version() {
         else
             log_error "Neither curl nor wget found. Please install one of them."
             exit 1
+        fi
+    fi
+}
+
+# Get binary metadata (hash, optimized URL) for a version
+get_binary_metadata() {
+    local version="$1"
+    local platform="$2"
+    
+    if [[ "$USE_R2" == "true" && -n "$R2_BASE_URL" ]]; then
+        local metadata_url="${R2_BASE_URL}/releases/v${version}/metadata.json"
+        
+        if command -v curl >/dev/null 2>&1; then
+            curl -s "$metadata_url" 2>/dev/null || echo ""
+        elif command -v wget >/dev/null 2>&1; then
+            wget -qO- "$metadata_url" 2>/dev/null || echo ""
         fi
     fi
 }
@@ -302,8 +318,26 @@ install_binary() {
     local download_url
     if [[ "$USE_R2" == "true" && -n "$R2_BASE_URL" ]]; then
         if [[ -n "$version" ]]; then
-            download_url="${R2_BASE_URL}/releases/v${version}/${remote_binary}"
-            log_info "Installing version: $version from R2"
+            # Try to get optimized binary URL from metadata
+            local metadata
+            metadata=$(get_binary_metadata "$version" "$platform")
+            
+            if [[ -n "$metadata" ]]; then
+                # Extract optimized URL from metadata if available
+                local optimized_url
+                optimized_url=$(echo "$metadata" | grep -o '"binary_url":"[^"]*"' | sed 's/"binary_url":"\([^"]*\)"/\1/' 2>/dev/null)
+                
+                if [[ -n "$optimized_url" ]]; then
+                    download_url="$optimized_url"
+                    log_info "Installing version: $version from R2 (optimized)"
+                else
+                    download_url="${R2_BASE_URL}/releases/v${version}/${remote_binary}"
+                    log_info "Installing version: $version from R2"
+                fi
+            else
+                download_url="${R2_BASE_URL}/releases/v${version}/${remote_binary}"
+                log_info "Installing version: $version from R2"
+            fi
         else
             log_error "R2 mode requires a specific version. Cannot install development version from R2."
             exit 1
@@ -371,34 +405,17 @@ install_binary() {
 check_path() {
     if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         log_warning "Install directory $INSTALL_DIR is not in your PATH"
-        
-        if [[ "$INTERACTIVE" == "true" ]]; then
-            echo ""
-            log_prompt "Would you like to see instructions for adding it to your PATH?"
-            read -p "Show PATH instructions? (y/n) [y]: " show_path
-            show_path=${show_path:-y}
-            
-            if [[ "$show_path" =~ ^[Yy]$ ]]; then
-                echo ""
-                log_info "Add this line to your shell profile (.bashrc, .zshrc, etc.):"
-                echo "export PATH=\"\$PATH:$INSTALL_DIR\""
-                echo ""
-                log_info "Or run this command to add it temporarily:"
-                echo "export PATH=\"\$PATH:$INSTALL_DIR\""
-            fi
-        else
-            log_info "Add this line to your shell profile (.bashrc, .zshrc, etc.):"
-            echo "export PATH=\"\$PATH:$INSTALL_DIR\""
-        fi
+        echo ""
+        log_info "Add this line to your shell profile (.bashrc, .zshrc, etc.):"
+        echo "export PATH=\"\$PATH:$INSTALL_DIR\""
+        echo ""
+        log_info "Or run this command to add it temporarily:"
+        echo "export PATH=\"\$PATH:$INSTALL_DIR\""
     fi
 }
 
 # Show usage examples
 show_usage_examples() {
-    if [[ "$INTERACTIVE" == "false" ]]; then
-        return
-    fi
-    
     echo ""
     log_info "Quick Start Examples:"
     echo ""
@@ -533,7 +550,7 @@ main() {
     # Determine target version
     local target_version="$VERSION"
     if [[ -z "$target_version" ]]; then
-        log_info "Fetching latest version from GitHub..."
+        log_info "Fetching latest version..."
         target_version=$(get_latest_version)
         if [[ -z "$target_version" ]]; then
             log_warning "Could not determine latest version, installing development version"
@@ -600,6 +617,9 @@ main() {
     echo "  2. Run './${BINARY_NAME}' to generate your first code summary"
     echo "  3. Check 'code4context-readme.txt' for more information"
     echo ""
+    
+    # Ensure clean exit
+    exit 0
 }
 
 # Run main function
