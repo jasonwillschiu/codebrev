@@ -125,7 +125,8 @@ get_latest_version() {
     fi
 }
 
-# Get binary metadata (hash, optimized URL) for a version
+# Get version-specific metadata (contains detailed info about this version)
+# metadata.json: Version-specific details including binary sources and build info
 get_binary_metadata() {
     local version="$1"
     local platform="$2"
@@ -141,7 +142,8 @@ get_binary_metadata() {
     fi
 }
 
-# Get global binary mapping to find optimal source version for each platform
+# Get global binary mapping (optimization index for finding optimal binary sources)
+# binary-mapping.json: Global index showing which version each platform's binary was last updated in
 get_binary_mapping() {
     if [[ "$USE_R2" == "true" && -n "$R2_BASE_URL" ]]; then
         local mapping_url="${R2_BASE_URL}/binary-mapping.json"
@@ -167,15 +169,19 @@ get_optimal_source_version() {
         mapping=$(get_binary_mapping)
         
         if [[ -n "$mapping" ]]; then
-            # Extract the source version for this platform from binary_sources object
+            # Use grep and cut for more reliable parsing
             local source_version
-            # Look for "platform":"version" pattern within binary_sources
-            source_version=$(echo "$mapping" | sed -n 's/.*"binary_sources"[^}]*"'$platform'":"\([^"]*\)".*/\1/p' 2>/dev/null)
+            source_version=$(echo "$mapping" | grep -o "\"$platform\":\"[^\"]*\"" | cut -d'"' -f4 2>/dev/null)
             
             if [[ -n "$source_version" ]]; then
+                log_info "Found optimal source version for $platform: v$source_version"
                 echo "$source_version"
                 return 0
+            else
+                log_info "No optimal source found for $platform in binary mapping"
             fi
+        else
+            log_info "No binary mapping found, using target version"
         fi
     fi
     
@@ -373,16 +379,19 @@ install_binary() {
     if [[ "$USE_R2" == "true" && -n "$R2_BASE_URL" ]]; then
         if [[ -n "$version" ]]; then
             # Get the optimal source version for this platform
+            log_info "Looking up optimal source version for $platform..."
             local source_version
             source_version=$(get_optimal_source_version "$platform" "$version")
             
-            if [[ "$source_version" != "$version" ]]; then
+            log_info "Optimal source version result: '$source_version' (target: '$version')"
+            
+            if [[ -n "$source_version" && "$source_version" != "$version" ]]; then
                 log_info "Binary for $platform is optimally sourced from v$source_version (saves R2 storage)"
                 download_url="${R2_BASE_URL}/releases/v${source_version}/${remote_binary}"
                 log_info "Installing version: $version (binary from v$source_version) from R2"
             else
                 download_url="${R2_BASE_URL}/releases/v${version}/${remote_binary}"
-                log_info "Installing version: $version from R2"
+                log_info "Installing version: $version from R2 (no optimization available)"
             fi
         else
             log_error "R2 mode requires a specific version. Cannot install development version from R2."

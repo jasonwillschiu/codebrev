@@ -1,3 +1,6 @@
+# 0.4.10 - Update: cicd.js added binary-mapping.json check
+- should download from the right version now if binary-mapping.json shows the latest version where binaries updated
+
 # 0.4.9 - Update: cicd.js prettier install instructions
 - added install instructions for claude code, opencode and cursor
 - enhanced code4context-readme.txt when installed

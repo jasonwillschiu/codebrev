@@ -659,7 +659,8 @@ async function uploadToR2(version, skipBuild = false) {
       }
     }
 
-    // Upload metadata
+    // Upload version-specific metadata.json
+    // This contains detailed info about this specific version including where each binary comes from
     spinner.update({ text: `📋 Creating metadata.json...` });
     const metadataFile = `metadata-${version}.json`;
     await fs.writeFile(metadataFile, JSON.stringify(metadata, null, 2));
@@ -672,7 +673,8 @@ async function uploadToR2(version, skipBuild = false) {
       throw new Error(`Failed to upload metadata: ${metadataUploadResult.stderr.toString()}`);
     }
 
-    // Create/update global binary mapping file
+    // Create/update global binary-mapping.json
+    // This is the optimization index that tells install.sh where to find each platform's binary
     spinner.update({ text: `📋 Updating binary mapping...` });
     const binaryMappingFile = `binary-mapping.json`;
     
