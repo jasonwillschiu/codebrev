@@ -534,12 +534,15 @@ async function getLatestVersionMetadata(awsEnv, bucket, endpoint) {
  * Uploads binaries to Cloudflare R2 with smart reuse from previous versions.
  * 
  * OPTIMIZATION: Instead of copying unchanged binaries to each new version folder,
- * this function creates metadata that points to the original version where the
- * binary was last updated. This saves significant R2 storage space and speeds
- * up deployment by avoiding redundant uploads.
+ * this function maintains a global binary-mapping.json that tracks where each
+ * platform's binary actually exists. This saves significant R2 storage space
+ * and speeds up deployment by avoiding redundant uploads.
  * 
- * The install script uses binary-mapping.json to fetch binaries from their
- * optimal source version rather than the current version folder.
+ * SIMPLE APPROACH: binary-mapping.json is the source of truth showing where
+ * binaries actually exist. metadata.json can show reference info, but install.sh
+ * always uses binary-mapping.json to find the real files.
+ * 
+ * The binary-mapping.json file is saved locally for git commit tracking.
  */
 async function uploadToR2(version, skipBuild = false) {
   const spinner = createBunSpinner(`☁️ Uploading binaries to Cloudflare R2...`).start();
@@ -613,12 +616,12 @@ async function uploadToR2(version, skipBuild = false) {
     };
 
     if (canReuseAll) {
-      // Fast path: Create references to existing binaries instead of copying
+      // Fast path: Reference existing binaries instead of copying
       for (const platform of platforms) {
         const fileName = `code4context-${platform}`;
         spinner.update({ text: `🔗 Referencing ${fileName} from v${sourceVersion}...` });
         
-        // Store metadata pointing to the source version where binary actually exists
+        // For metadata.json: store reference info (can show immediate source)
         const baseUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.${endpoint.replace('https://', '')}`;
         metadata.binaries[platform] = {
           url: `${baseUrl}/releases/v${sourceVersion}/${fileName}`,
@@ -674,7 +677,7 @@ async function uploadToR2(version, skipBuild = false) {
     }
 
     // Create/update global binary-mapping.json
-    // This is the optimization index that tells install.sh where to find each platform's binary
+    // This is the source of truth that tells install.sh where to find each platform's binary
     spinner.update({ text: `📋 Updating binary mapping...` });
     const binaryMappingFile = `binary-mapping.json`;
     
@@ -693,20 +696,35 @@ async function uploadToR2(version, skipBuild = false) {
       }
     }
     
-    // Update mapping with current version's binary sources
+    // Update mapping with current version info
     globalMapping.last_updated = new Date().toISOString();
     globalMapping.latest_version = version;
     if (!globalMapping.binary_sources) {
       globalMapping.binary_sources = {};
     }
     
-    // Update each platform's source version
-    for (const [platform, sourceVersion] of Object.entries(metadata.binary_source_versions)) {
-      globalMapping.binary_sources[platform] = sourceVersion;
+    // For each platform, determine where the binary actually exists
+    for (const platform of platforms) {
+      if (canReuseAll) {
+        // If reusing, check where the source version's binary actually exists
+        const existingSource = globalMapping.binary_sources[platform];
+        if (existingSource) {
+          // Keep pointing to the same actual location
+          globalMapping.binary_sources[platform] = existingSource;
+        } else {
+          // Fallback to source version if no existing mapping
+          globalMapping.binary_sources[platform] = sourceVersion;
+        }
+      } else {
+        // New binaries are uploaded to current version
+        globalMapping.binary_sources[platform] = version;
+      }
     }
     
+    // Save to local repo for git commit
     await fs.writeFile(binaryMappingFile, JSON.stringify(globalMapping, null, 2));
     
+    // Upload to R2
     const mappingUploadResult = await $`aws s3 cp ${binaryMappingFile} s3://${bucket}/binary-mapping.json --endpoint-url ${endpoint}`
       .env(awsEnv)
       .nothrow();
@@ -738,8 +756,8 @@ async function uploadToR2(version, skipBuild = false) {
       throw new Error(`Failed to upload install script: ${installScriptResult.stderr.toString()}`);
     }
 
-    // Clean up temp files
-    await $`rm ${versionFile} ${metadataFile} ${binaryMappingFile}`.nothrow();
+    // Clean up temp files (keep binary-mapping.json for git commit)
+    await $`rm ${versionFile} ${metadataFile}`.nothrow();
 
     spinner.success({ text: green(`✅ Binaries uploaded to R2 successfully`) });
 
@@ -747,6 +765,7 @@ async function uploadToR2(version, skipBuild = false) {
     const baseUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.${endpoint.replace('https://', '')}`;
     console.log(cyan(`🔗 Release available at: ${baseUrl}/${versionPath}/`));
     console.log(cyan(`🔗 Install script: ${baseUrl}/install.sh`));
+    console.log(cyan(`📋 Binary mapping saved to: ${binaryMappingFile} (ready for git commit)`));
 
     if (canReuseAll) {
       console.log(cyan(`♻️  All binaries reused from v${sourceVersion} (content hash: ${currentHash.substring(0, 8)}...)`));

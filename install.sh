@@ -174,14 +174,14 @@ get_optimal_source_version() {
             source_version=$(echo "$mapping" | grep -o "\"$platform\":\"[^\"]*\"" | cut -d'"' -f4 2>/dev/null)
             
             if [[ -n "$source_version" ]]; then
-                log_info "Found optimal source version for $platform: v$source_version"
+                log_info "Found optimal source version for $platform: v$source_version" >&2
                 echo "$source_version"
                 return 0
             else
-                log_info "No optimal source found for $platform in binary mapping"
+                log_info "No optimal source found for $platform in binary mapping" >&2
             fi
         else
-            log_info "No binary mapping found, using target version"
+            log_info "No binary mapping found, using target version" >&2
         fi
     fi
     

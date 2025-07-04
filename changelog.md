@@ -1,3 +1,7 @@
+# 0.4.11 - Update: cicd.js using binary-mapping.json as source of truth
+- previously still referencing metadata.json
+- now only using binary-mapping.json to find binaries
+
 # 0.4.10 - Update: cicd.js added binary-mapping.json check
 - should download from the right version now if binary-mapping.json shows the latest version where binaries updated
 
