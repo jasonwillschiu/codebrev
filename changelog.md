@@ -1,3 +1,8 @@
+# 0.4.9 - Update: cicd.js prettier install instructions
+- added install instructions for claude code, opencode and cursor
+- enhanced code4context-readme.txt when installed
+- binary reuse is sym link instead of copy now
+
 # 0.4.8 - Update: cicd.js binary reuse 5
 - hasGoFileChanges() function - Checks git status --porcelain for any .go file modifications
 - Early exit in build logic - If no .go files changed, skip building entirely

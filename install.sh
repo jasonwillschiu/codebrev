@@ -141,6 +141,48 @@ get_binary_metadata() {
     fi
 }
 
+# Get global binary mapping to find optimal source version for each platform
+get_binary_mapping() {
+    if [[ "$USE_R2" == "true" && -n "$R2_BASE_URL" ]]; then
+        local mapping_url="${R2_BASE_URL}/binary-mapping.json"
+        
+        if command -v curl >/dev/null 2>&1; then
+            curl -s "$mapping_url" 2>/dev/null || echo ""
+        elif command -v wget >/dev/null 2>&1; then
+            wget -qO- "$mapping_url" 2>/dev/null || echo ""
+        fi
+    fi
+}
+
+# Get the optimal source version for a specific platform
+# This function implements the R2 storage optimization by fetching binaries
+# from the version where they were last updated, rather than copying them
+# to every new version folder. This saves storage space and speeds up deployment.
+get_optimal_source_version() {
+    local platform="$1"
+    local target_version="$2"
+    
+    if [[ "$USE_R2" == "true" && -n "$R2_BASE_URL" ]]; then
+        local mapping
+        mapping=$(get_binary_mapping)
+        
+        if [[ -n "$mapping" ]]; then
+            # Extract the source version for this platform from binary_sources object
+            local source_version
+            # Look for "platform":"version" pattern within binary_sources
+            source_version=$(echo "$mapping" | sed -n 's/.*"binary_sources"[^}]*"'$platform'":"\([^"]*\)".*/\1/p' 2>/dev/null)
+            
+            if [[ -n "$source_version" ]]; then
+                echo "$source_version"
+                return 0
+            fi
+        fi
+    fi
+    
+    # Fallback to target version
+    echo "$target_version"
+}
+
 # Check if binary exists and get current version
 get_current_version() {
     local binary_path="${INSTALL_DIR}/${BINARY_NAME}"
@@ -271,13 +313,23 @@ handle_gitignore() {
 
 # Create readme file in installation directory
 create_readme() {
+    local installed_version="$1"
+    local source_version="$2"
+    local install_date="$3"
     local readme_path="${INSTALL_DIR}/code4context-readme.txt"
     
-    cat > "$readme_path" << 'EOF'
+    cat > "$readme_path" << EOF
 # code4context Installation
 
 This directory contains the code4context binary, a tool for generating 
 structured code summaries for LLM consumption.
+
+## Installation Details
+
+- Version: ${installed_version:-"unknown"}
+- Binary Source: ${source_version:-"same version"}
+- Install Date: ${install_date:-"$(date)"}
+- Install Location: ${INSTALL_DIR}
 
 ## Important Notes
 
@@ -294,6 +346,8 @@ structured code summaries for LLM consumption.
 
 Run './code4context' in any directory to generate a codebrev.md file
 containing a structured overview of your codebase.
+
+Check version: ./code4context --version
 
 For more information, visit: https://github.com/jasonwillschiu/code4context-com
 EOF
@@ -318,22 +372,14 @@ install_binary() {
     local download_url
     if [[ "$USE_R2" == "true" && -n "$R2_BASE_URL" ]]; then
         if [[ -n "$version" ]]; then
-            # Try to get optimized binary URL from metadata
-            local metadata
-            metadata=$(get_binary_metadata "$version" "$platform")
+            # Get the optimal source version for this platform
+            local source_version
+            source_version=$(get_optimal_source_version "$platform" "$version")
             
-            if [[ -n "$metadata" ]]; then
-                # Extract optimized URL from metadata if available
-                local optimized_url
-                optimized_url=$(echo "$metadata" | grep -o '"binary_url":"[^"]*"' | sed 's/"binary_url":"\([^"]*\)"/\1/' 2>/dev/null)
-                
-                if [[ -n "$optimized_url" ]]; then
-                    download_url="$optimized_url"
-                    log_info "Installing version: $version from R2 (optimized)"
-                else
-                    download_url="${R2_BASE_URL}/releases/v${version}/${remote_binary}"
-                    log_info "Installing version: $version from R2"
-                fi
+            if [[ "$source_version" != "$version" ]]; then
+                log_info "Binary for $platform is optimally sourced from v$source_version (saves R2 storage)"
+                download_url="${R2_BASE_URL}/releases/v${source_version}/${remote_binary}"
+                log_info "Installing version: $version (binary from v$source_version) from R2"
             else
                 download_url="${R2_BASE_URL}/releases/v${version}/${remote_binary}"
                 log_info "Installing version: $version from R2"
@@ -584,14 +630,26 @@ main() {
     echo ""
     log_info "Installing code4context..."
     
+    # Get optimal source version for readme
+    local binary_source_version="$target_version"
+    if [[ "$USE_R2" == "true" && -n "$R2_BASE_URL" && -n "$target_version" ]]; then
+        binary_source_version=$(get_optimal_source_version "$platform" "$target_version")
+    fi
+    
     # Install binary
     if ! install_binary "$platform" "$target_version"; then
         log_error "Installation failed"
         exit 1
     fi
     
-    # Create readme file
-    create_readme
+    # Create readme file with version information
+    local install_date
+    install_date=$(date)
+    if [[ "$binary_source_version" != "$target_version" ]]; then
+        create_readme "$target_version" "v$binary_source_version (optimized)" "$install_date"
+    else
+        create_readme "$target_version" "v$target_version" "$install_date"
+    fi
     
     # Handle version control gitignore
     handle_gitignore

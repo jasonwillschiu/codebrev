@@ -7,6 +7,7 @@
 //   bun run cicd.js --full-release                    # Complete GitHub release workflow
 //   bun run cicd.js --r2-release                      # Complete R2 release workflow
 //   bun run cicd.js --build --commit --tag --release  # Same as --full-release
+//   bun run cicd.js --install-guide                   # Show installation guide for AI tools
 // Usage: 2 modes (dev and build server) and deployment with git
 import { $ } from "bun";
 import path from "path";
@@ -161,6 +162,7 @@ const { values } = parseArgs({
     'full-release': { type: 'boolean', default: false },
     'r2-release': { type: 'boolean', default: false },
     help: { type: 'boolean', default: false },
+    'install-guide': { type: 'boolean', default: false },
   },
   strict: false,
   allowPositionals: false,
@@ -170,6 +172,7 @@ const mode = values.mode;
 const isFullRelease = values['full-release'];
 const isR2Release = values['r2-release'];
 const showHelp = values.help;
+const showInstallGuide = values['install-guide'];
 
 // Check for help flag first
 if (showHelp) {
@@ -182,7 +185,14 @@ if (showHelp) {
   console.log(cyan("  bun run cicd.js --full-release                    # Complete GitHub release workflow"));
   console.log(cyan("  bun run cicd.js --r2-release                      # Complete R2 release workflow"));
   console.log(cyan("  bun run cicd.js --build --commit --tag --release  # Same as --full-release"));
+  console.log(cyan("  bun run cicd.js --install-guide                   # Show installation guide for AI tools"));
   console.log(cyan("  bun run cicd.js --help                            # Show this help"));
+  process.exit(0);
+}
+
+// Check for install guide flag
+if (showInstallGuide) {
+  showInstallationGuide();
   process.exit(0);
 }
 
@@ -520,7 +530,17 @@ async function getLatestVersionMetadata(awsEnv, bucket, endpoint) {
   }
 }
 
-/** Uploads binaries to Cloudflare R2 with smart reuse from previous versions */
+/** 
+ * Uploads binaries to Cloudflare R2 with smart reuse from previous versions.
+ * 
+ * OPTIMIZATION: Instead of copying unchanged binaries to each new version folder,
+ * this function creates metadata that points to the original version where the
+ * binary was last updated. This saves significant R2 storage space and speeds
+ * up deployment by avoiding redundant uploads.
+ * 
+ * The install script uses binary-mapping.json to fetch binaries from their
+ * optimal source version rather than the current version folder.
+ */
 async function uploadToR2(version, skipBuild = false) {
   const spinner = createBunSpinner(`☁️ Uploading binaries to Cloudflare R2...`).start();
 
@@ -588,28 +608,24 @@ async function uploadToR2(version, skipBuild = false) {
       version: version,
       created_at: new Date().toISOString(),
       content_hash: currentHash,
-      binaries: {}
+      binaries: {},
+      binary_source_versions: {}
     };
 
     if (canReuseAll) {
-      // Fast path: Copy all binaries from previous version
+      // Fast path: Create references to existing binaries instead of copying
       for (const platform of platforms) {
         const fileName = `code4context-${platform}`;
-        spinner.update({ text: `📋 Copying ${fileName} from v${sourceVersion}...` });
+        spinner.update({ text: `🔗 Referencing ${fileName} from v${sourceVersion}...` });
         
-        const copyResult = await $`aws s3 cp s3://${bucket}/releases/v${sourceVersion}/${fileName} s3://${bucket}/${versionPath}/${fileName} --endpoint-url ${endpoint}`
-          .env(awsEnv)
-          .nothrow();
-
-        if (copyResult.exitCode !== 0) {
-          throw new Error(`Failed to copy ${fileName}: ${copyResult.stderr.toString()}`);
-        }
-
+        // Store metadata pointing to the source version where binary actually exists
         const baseUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.${endpoint.replace('https://', '')}`;
         metadata.binaries[platform] = {
-          url: `${baseUrl}/${versionPath}/${fileName}`,
-          reused_from: sourceVersion
+          url: `${baseUrl}/releases/v${sourceVersion}/${fileName}`,
+          reused_from: sourceVersion,
+          last_updated_version: sourceVersion
         };
+        metadata.binary_source_versions[platform] = sourceVersion;
       }
     } else {
       // Need to build and upload new binaries
@@ -636,8 +652,10 @@ async function uploadToR2(version, skipBuild = false) {
         const baseUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.${endpoint.replace('https://', '')}`;
         metadata.binaries[platform] = {
           url: `${baseUrl}/${versionPath}/${file}`,
-          newly_built: true
+          newly_built: true,
+          last_updated_version: version
         };
+        metadata.binary_source_versions[platform] = version;
       }
     }
 
@@ -652,6 +670,47 @@ async function uploadToR2(version, skipBuild = false) {
 
     if (metadataUploadResult.exitCode !== 0) {
       throw new Error(`Failed to upload metadata: ${metadataUploadResult.stderr.toString()}`);
+    }
+
+    // Create/update global binary mapping file
+    spinner.update({ text: `📋 Updating binary mapping...` });
+    const binaryMappingFile = `binary-mapping.json`;
+    
+    // Get existing mapping or create new one
+    let globalMapping = {};
+    const existingMappingResult = await $`aws s3 cp s3://${bucket}/binary-mapping.json - --endpoint-url ${endpoint}`
+      .env(awsEnv)
+      .nothrow();
+    
+    if (existingMappingResult.exitCode === 0) {
+      try {
+        globalMapping = JSON.parse(existingMappingResult.stdout.toString());
+      } catch (e) {
+        // If parsing fails, start with empty mapping
+        globalMapping = {};
+      }
+    }
+    
+    // Update mapping with current version's binary sources
+    globalMapping.last_updated = new Date().toISOString();
+    globalMapping.latest_version = version;
+    if (!globalMapping.binary_sources) {
+      globalMapping.binary_sources = {};
+    }
+    
+    // Update each platform's source version
+    for (const [platform, sourceVersion] of Object.entries(metadata.binary_source_versions)) {
+      globalMapping.binary_sources[platform] = sourceVersion;
+    }
+    
+    await fs.writeFile(binaryMappingFile, JSON.stringify(globalMapping, null, 2));
+    
+    const mappingUploadResult = await $`aws s3 cp ${binaryMappingFile} s3://${bucket}/binary-mapping.json --endpoint-url ${endpoint}`
+      .env(awsEnv)
+      .nothrow();
+
+    if (mappingUploadResult.exitCode !== 0) {
+      throw new Error(`Failed to upload binary mapping: ${mappingUploadResult.stderr.toString()}`);
     }
 
     // Update latest version marker
@@ -678,7 +737,7 @@ async function uploadToR2(version, skipBuild = false) {
     }
 
     // Clean up temp files
-    await $`rm ${versionFile} ${metadataFile}`.nothrow();
+    await $`rm ${versionFile} ${metadataFile} ${binaryMappingFile}`.nothrow();
 
     spinner.success({ text: green(`✅ Binaries uploaded to R2 successfully`) });
 
@@ -699,6 +758,118 @@ async function uploadToR2(version, skipBuild = false) {
     }
     throw error;
   }
+}
+
+/** Shows installation guide for AI coding tools */
+function showInstallationGuide() {
+  console.log(bold(green("🚀 Code4Context Installation Guide for AI Coding Tools")));
+  console.log("");
+  
+  // Installation first
+  console.log(bold(cyan("📦 Step 1: Install Code4Context Binary")));
+  console.log("");
+  console.log(yellow("Quick install (recommended):"));
+  console.log(`  ${green("curl -fsSL https://raw.githubusercontent.com/jasonwillschiu/code4context-com/main/install.sh | bash")}`);
+  console.log("");
+  console.log(yellow("Or download manually from:"));
+  console.log(`  ${green("https://github.com/jasonwillschiu/code4context-com/releases")}`);
+  console.log("");
+  
+  // Configuration for each tool
+  console.log(bold(cyan("📱 Step 2: Configure Your AI Tool")));
+  console.log("");
+  
+  // OpenCode
+  console.log(bold(yellow("OpenCode:")));
+  console.log(yellow("Create or edit your opencode.json file:"));
+  console.log(green(`{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "code4context": {
+      "type": "local",
+      "command": [
+        "/path/to/code4context"
+      ],
+      "environment": {}
+    }
+  }
+}`));
+  console.log("");
+  
+  // Claude Code
+  console.log(bold(yellow("Claude Code:")));
+  console.log(yellow("Add the MCP server using the binary path:"));
+  console.log(`  ${green("claude mcp add code4context -- /path/to/code4context")}`);
+  console.log("");
+  console.log(yellow("For HTTP transport:"));
+  console.log(`  ${green("claude mcp add --transport http code4context https://your-server.com/mcp")}`);
+  console.log("");
+  console.log(yellow("For SSE transport:"));
+  console.log(`  ${green("claude mcp add --transport sse code4context https://your-server.com/sse")}`);
+  console.log("");
+  
+  // Cursor
+  console.log(bold(yellow("Cursor:")));
+  console.log(yellow("Create or edit your mcp.json file:"));
+  console.log(green(`{
+  "mcpServers": {
+    "code4context": {
+      "command": "/path/to/code4context",
+      "args": []
+    }
+  }
+}`));
+  console.log("");
+  console.log(yellow("For remote server:"));
+  console.log(green(`{
+  "mcpServers": {
+    "code4context": {
+      "url": "https://your-server.com/mcp"
+    }
+  }
+}`));
+  console.log("");
+  
+  // Usage tips
+  console.log(bold(cyan("💡 Usage Tips")));
+  console.log("");
+  console.log(yellow("• The binary generates structured code summaries (codebrev.md)"));
+  console.log(yellow("• Works with any codebase - Go, JavaScript, TypeScript, Python, etc."));
+  console.log(yellow("• Provides function signatures, types, and file organization"));
+  console.log(yellow("• Use in prompts: 'analyze this codebase using code4context'"));
+  console.log("");
+  
+  // Binary usage
+  console.log(bold(cyan("🔧 Binary Usage")));
+  console.log("");
+  console.log(yellow("Generate code summary for current directory:"));
+  console.log(`  ${green("./code4context")}`);
+  console.log("");
+  console.log(yellow("Generate summary for specific directory:"));
+  console.log(`  ${green("./code4context /path/to/project")}`);
+  console.log("");
+  console.log(yellow("Check version:"));
+  console.log(`  ${green("./code4context --version")}`);
+  console.log("");
+  
+  // Path examples
+  console.log(bold(cyan("📍 Common Installation Paths")));
+  console.log("");
+  console.log(yellow("If installed to current directory:"));
+  console.log(`  ${green("./code4context")}`);
+  console.log("");
+  console.log(yellow("If installed to ~/.local/bin:"));
+  console.log(`  ${green("~/.local/bin/code4context")}`);
+  console.log("");
+  console.log(yellow("If installed to /usr/local/bin:"));
+  console.log(`  ${green("/usr/local/bin/code4context")}`);
+  console.log("");
+  console.log(yellow("Or if in PATH, just:"));
+  console.log(`  ${green("code4context")}`);
+  console.log("");
+  
+  console.log(bold(green("✅ Ready to enhance your AI coding experience!")));
+  console.log(cyan("📚 For more details, visit: https://github.com/jasonwillschiu/code4context-com"));
 }
 
 /** Creates a GitHub release and uploads binaries */
@@ -913,5 +1084,7 @@ if (mode === 'dev') {
   console.log(cyan("  bun run cicd.js --upload-r2                       # Upload to Cloudflare R2"));
   console.log(cyan("  bun run cicd.js --full-release                    # Complete GitHub release workflow"));
   console.log(cyan("  bun run cicd.js --r2-release                      # Complete R2 release workflow"));
-  console.log(cyan("  bun run cicd.js --build --commit --tag --release  # Same as --full-release")); process.exit(1);
+  console.log(cyan("  bun run cicd.js --build --commit --tag --release  # Same as --full-release"));
+  console.log(cyan("  bun run cicd.js --install-guide                   # Show installation guide for AI tools"));
+  process.exit(1);
 }
