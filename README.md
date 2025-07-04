@@ -31,16 +31,52 @@ Gets cached `codebrev.md` file content, or generates it if it doesn't exist (cac
 
 ## Installation
 
-1. Build the server:
+### Quick Install (Recommended)
+
+Install the latest version using our hosted install script:
+
 ```bash
-cd /path/to/code4context-com
-go build -o mcp-server/code4context-mcp ./mcp-server
+# Install latest version
+curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com
+
+# Install specific version
+curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com --version 0.4.0
+
+# Non-interactive installation
+NONINTERACTIVE=1 curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com
+
+# Install to specific directory
+curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com --dir ~/.local/bin
 ```
 
-2. Make it executable and add to PATH (optional):
+### Manual Installation
+
+1. Download the appropriate binary for your platform from [releases](https://code4context.jasonchiu.com/releases/):
+   - macOS ARM64: `code4context-darwin-arm64`
+   - macOS Intel: `code4context-darwin-amd64`
+   - Linux ARM64: `code4context-linux-arm64`
+   - Linux x64: `code4context-linux-amd64`
+   - Windows ARM64: `code4context-windows-arm64.exe`
+   - Windows x64: `code4context-windows-amd64.exe`
+
+2. Make it executable and rename:
 ```bash
-chmod +x mcp-server/code4context-mcp
-# Optionally copy to a directory in your PATH
+chmod +x code4context-*
+mv code4context-* code4context
+```
+
+### Build from Source
+
+1. Clone and build the server:
+```bash
+git clone https://github.com/jasonwillschiu/code4context-com.git
+cd code4context-com
+go build -o code4context .
+```
+
+2. Make it executable:
+```bash
+chmod +x code4context
 ```
 
 ## Configuration
@@ -53,7 +89,7 @@ Add to your Claude Desktop configuration:
 {
   "mcpServers": {
     "code4context": {
-      "command": "/path/to/code4context-mcp",
+      "command": "/path/to/code4context",
       "args": []
     }
   }
@@ -68,7 +104,7 @@ Add to your `mcp.json` configuration:
 {
   "mcpServers": {
     "code4context": {
-      "command": "/path/to/code4context-mcp",
+      "command": "/path/to/code4context",
       "args": []
     }
   }
@@ -84,12 +120,14 @@ Add to your `opencode.json` configuration:
   "mcp": {
     "code4context": {
       "type": "local",
-      "command": ["/path/to/code4context-mcp"],
+      "command": ["/path/to/code4context"],
       "environment": {}
     }
   }
 }
 ```
+
+**Note**: Replace `/path/to/code4context` with the actual path where you installed the binary. If you installed to a directory in your PATH (like `~/.local/bin`), you can just use `code4context`.
 
 ## Usage Examples
 
@@ -123,9 +161,10 @@ The server is built on top of the existing code4context functionality:
 ## Troubleshooting
 
 ### Server Not Starting
-- Check that the binary is executable: `chmod +x code4context-mcp`
+- Check that the binary is executable: `chmod +x code4context`
 - Verify the path in your MCP client configuration
 - Check logs in your MCP client for connection errors
+- Ensure the binary is in your PATH or use the full path in configuration
 
 ### Tools Not Working
 - Ensure the directory path exists and is accessible
@@ -134,3 +173,23 @@ The server is built on top of the existing code4context functionality:
 
 ### Debug Mode
 The server logs to stderr, so you can see debug information in your MCP client logs.
+
+## Distribution
+
+This project uses Cloudflare R2 for binary distribution, providing:
+- **Fast global CDN**: Binaries served from edge locations worldwide
+- **Cost-effective**: Extremely low storage and bandwidth costs
+- **Reliable**: 99.9% uptime SLA with automatic failover
+- **Self-hosted**: Complete control over distribution infrastructure
+
+For detailed R2 setup instructions, see [R2-SETUP.md](R2-SETUP.md).
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+For development and release workflows, see the CICD documentation in `cicd.js`.

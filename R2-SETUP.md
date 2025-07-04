@@ -80,7 +80,7 @@ sudo apt install awscli
 ### Build and Upload to R2
 
 ```bash
-# Complete R2 release workflow
+# Complete R2 release workflow (includes install script upload)
 bun run cicd.js --r2-release
 
 # Individual steps
@@ -91,18 +91,25 @@ bun run cicd.js --upload-r2
 bun run cicd.js --build --commit --tag --upload-r2
 ```
 
+**Note**: The `--upload-r2` command now automatically uploads:
+- All cross-platform binaries to `releases/v{version}/`
+- The `install.sh` script to the root of your bucket
+- The `latest-version.txt` version marker
+
 ### Install from R2
 
 ```bash
-# Set R2 as source
-export USE_R2=true
-export R2_BASE_URL="https://your-domain.com"
+# Install latest version (install script hosted on R2)
+curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com
 
 # Install specific version
-curl -fsSL https://raw.githubusercontent.com/jasonwillschiu/code4context-com/main/install.sh | sh -s -- --version 0.1.2
+curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com --version 0.1.2
 
-# Or use flags directly
-curl -fsSL https://raw.githubusercontent.com/jasonwillschiu/code4context-com/main/install.sh | sh -s -- --use-r2 --r2-url https://your-domain.com --version 0.1.2
+# Non-interactive installation
+NONINTERACTIVE=1 curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com
+
+# Install to specific directory
+curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com --dir ~/.local/bin
 ```
 
 ## 📁 R2 File Structure
@@ -111,7 +118,8 @@ Your R2 bucket will be organized as:
 
 ```
 code4context-binaries/
-├── latest-version.txt                    # Contains latest version number
+├── install.sh                           # Installation script
+├── latest-version.txt                   # Contains latest version number
 └── releases/
     ├── v0.1.0/
     │   ├── code4context-darwin-amd64

@@ -1,3 +1,7 @@
+# 0.4.2 - update: install.sh interactive TTY
+- uses TTY redirection to make piped installation interactive
+- cicd.js fix for --help error
+
 # 0.4.1 - Add: install script and cicd.js
 - cicd.js to automate git operations, build and deploy
 - added install.sh for curl installation command

@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set +x
 
 # code4context Interactive Install Script
 # Downloads and installs the appropriate binary for your platform
@@ -44,9 +45,25 @@ log_prompt() {
 
 # Check if running non-interactively
 check_interactive() {
-    if [[ -n "${NONINTERACTIVE:-}" ]] || [[ ! -t 0 ]]; then
+    # Force non-interactive if NONINTERACTIVE is set
+    if [[ -n "${NONINTERACTIVE:-}" ]]; then
         INTERACTIVE=false
-        log_info "Running in non-interactive mode"
+        log_info "Running in non-interactive mode (NONINTERACTIVE set)"
+        return
+    fi
+    
+    # If stdin is not a terminal (piped), try to use TTY for interactive input
+    if [[ ! -t 0 ]]; then
+        if [[ -r /dev/tty ]]; then
+            log_info "Piped input detected, redirecting to TTY for interactive mode"
+            exec < /dev/tty
+            INTERACTIVE=true
+        else
+            INTERACTIVE=false
+            log_info "Running in non-interactive mode (no TTY available)"
+        fi
+    else
+        INTERACTIVE=true
     fi
 }
 

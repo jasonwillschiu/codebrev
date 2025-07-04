@@ -500,6 +500,17 @@ async function uploadToR2(version) {
       throw new Error(`Failed to upload version marker: ${versionUploadResult.stderr.toString()}`);
     }
 
+    // Upload install script
+    spinner.update({ text: `📜 Uploading install script...` });
+
+    const installScriptResult = await $`aws s3 cp install.sh s3://${bucket}/install.sh --endpoint-url ${endpoint}`
+      .env(awsEnv)
+      .nothrow();
+
+    if (installScriptResult.exitCode !== 0) {
+      throw new Error(`Failed to upload install script: ${installScriptResult.stderr.toString()}`);
+    }
+
     // Clean up temp file
     await $`rm ${versionFile}`.nothrow();
 
@@ -508,12 +519,14 @@ async function uploadToR2(version) {
     // Show download URLs
     const baseUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.${endpoint.replace('https://', '')}`;
     console.log(cyan(`🔗 Binaries available at: ${baseUrl}/${versionPath}/`));
+    console.log(cyan(`🔗 Install script available at: ${baseUrl}/install.sh`));
 
     // List uploaded files
     console.log(cyan('📦 Uploaded files:'));
     files.forEach(file => {
       console.log(`  ${baseUrl}/${versionPath}/${file}`);
     });
+    console.log(`  ${baseUrl}/install.sh`);
 
   } catch (error) {
     if (spinner.isSpinning()) {
