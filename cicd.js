@@ -433,12 +433,50 @@ async function buildLocal() {
   }
 }
 
-/** Calculates SHA256 hash of a file */
-async function calculateFileHash(filePath) {
+/** Calculates content hash based on Go source files that affect the binary */
+async function calculateContentHash(platform) {
+  // Hash only the files that actually affect the Go binary compilation
+  // This excludes README, docs, install scripts, etc.
+  
   const hasher = new Bun.CryptoHasher("sha256");
-  const file = Bun.file(filePath);
-  const arrayBuffer = await file.arrayBuffer();
-  hasher.update(new Uint8Array(arrayBuffer));
+  
+  // Hash platform (since different platforms may have different binaries)
+  hasher.update(new TextEncoder().encode(platform));
+  
+  // Get list of Go source files
+  const goFilesResult = await $`find . -name "*.go" -not -path "./test-files/*" | sort`.nothrow();
+  if (goFilesResult.exitCode === 0) {
+    const goFiles = goFilesResult.stdout.toString().trim().split('\n').filter(f => f.trim());
+    
+    for (const file of goFiles) {
+      try {
+        const content = await fs.readFile(file.trim(), 'utf-8');
+        hasher.update(new TextEncoder().encode(file));
+        hasher.update(new TextEncoder().encode(content));
+      } catch (e) {
+        // Skip files that can't be read
+      }
+    }
+  }
+  
+  // Hash go.mod for dependency changes
+  try {
+    const goMod = await fs.readFile('go.mod', 'utf-8');
+    hasher.update(new TextEncoder().encode('go.mod'));
+    hasher.update(new TextEncoder().encode(goMod));
+  } catch (e) {
+    // Ignore if file doesn't exist
+  }
+  
+  // Hash go.sum for dependency lock changes
+  try {
+    const goSum = await fs.readFile('go.sum', 'utf-8');
+    hasher.update(new TextEncoder().encode('go.sum'));
+    hasher.update(new TextEncoder().encode(goSum));
+  } catch (e) {
+    // Ignore if file doesn't exist
+  }
+  
   return hasher.digest("hex");
 }
 
@@ -499,8 +537,8 @@ async function uploadToR2(version) {
       spinner.update({ text: `🔍 Processing ${file}...` });
 
       const filePath = `bin/${file}`;
-      const hash = await calculateFileHash(filePath);
       const platform = file.replace('code4context-', '').replace('.exe', '');
+      const hash = await calculateContentHash(platform);
       
       // Check if binary with this hash already exists
       const binaryExists = await checkExistingBinary(hash, awsEnv, bucket, endpoint);

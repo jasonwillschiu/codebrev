@@ -33,10 +33,10 @@ Gets cached `codebrev.md` file content, or generates it if it doesn't exist (cac
 
 ### Quick Install (Recommended)
 
-Install the latest version using our hosted install script:
+Install the latest version using our interactive install script:
 
 ```bash
-# Install latest version
+# Interactive installation (recommended)
 curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com
 
 # Install specific version
@@ -48,6 +48,13 @@ NONINTERACTIVE=1 curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -
 # Install to specific directory
 curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com --dir ~/.local/bin
 ```
+
+The installer features:
+- **Interactive mode**: Prompts for installation directory and .gitignore setup
+- **TTY redirection**: Works interactively even when piped from curl
+- **Smart binary selection**: Automatically uses optimized binary URLs when available
+- **PATH guidance**: Shows how to add the binary to your PATH
+- **Quick start examples**: Displays usage examples after installation
 
 ### Manual Installation
 
@@ -176,11 +183,29 @@ The server logs to stderr, so you can see debug information in your MCP client l
 
 ## Distribution
 
-This project uses Cloudflare R2 for binary distribution, providing:
+This project uses Cloudflare R2 for binary distribution with intelligent binary reuse:
+
+### Smart Binary Deduplication
+- **Content-based hashing**: Binaries are stored by content hash, not version
+- **Automatic reuse**: Identical source code reuses existing binaries across versions
+- **Storage optimization**: Only uploads new binaries when Go source code actually changes
+- **Bandwidth savings**: Faster downloads through optimized binary URLs
+
+### Infrastructure Benefits
 - **Fast global CDN**: Binaries served from edge locations worldwide
-- **Cost-effective**: Extremely low storage and bandwidth costs
+- **Cost-effective**: Extremely low storage and bandwidth costs with deduplication
 - **Reliable**: 99.9% uptime SLA with automatic failover
 - **Self-hosted**: Complete control over distribution infrastructure
+
+### How Binary Reuse Works
+When releasing a new version, the system:
+1. Calculates a hash based on Go source files, go.mod, and go.sum
+2. Checks if a binary with that hash already exists in R2
+3. If exists: Creates metadata pointing to the existing binary (no upload needed)
+4. If new: Uploads the binary to a hash-based path and creates metadata
+5. Generates `metadata.json` with optimized binary URLs for the installer
+
+This means documentation updates, script changes, or version bumps without code changes will reuse existing binaries, saving time and storage costs.
 
 For detailed R2 setup instructions, see [R2-SETUP.md](R2-SETUP.md).
 

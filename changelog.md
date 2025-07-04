@@ -1,3 +1,7 @@
+# 0.4.5 - Update: cicd.js binary reuse
+- now looks at all *.go files to see if binary will be reused
+- modified names of mcp servers to code4context and docs4context
+
 # 0.4.4 - Update: cicd.js binary reuse
 - previously binary reuse wasn't implemented
 
