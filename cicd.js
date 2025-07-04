@@ -314,6 +314,17 @@ async function checkGitStatus() {
   console.log(green("✅ Git status check passed: Changes detected."));
 }
 
+/** Checks if any .go files are staged or modified */
+async function hasGoFileChanges() {
+  const { stdout, exitCode } = await $`git status --porcelain`.nothrow();
+  if (exitCode !== 0) return true; // If we can't check, assume changes
+  
+  const changes = stdout.toString().trim().split('\n').filter(line => line.trim());
+  const goFileChanges = changes.filter(line => line.includes('.go'));
+  
+  return goFileChanges.length > 0;
+}
+
 /** Checks if a Git tag already exists. Throws error if it does. */
 async function checkGitTagExists(version) {
   const tagToCheck = `v${version}`;
@@ -510,7 +521,7 @@ async function getLatestVersionMetadata(awsEnv, bucket, endpoint) {
 }
 
 /** Uploads binaries to Cloudflare R2 with smart reuse from previous versions */
-async function uploadToR2(version) {
+async function uploadToR2(version, skipBuild = false) {
   const spinner = createBunSpinner(`☁️ Uploading binaries to Cloudflare R2...`).start();
 
   try {
@@ -558,7 +569,16 @@ async function uploadToR2(version) {
     let canReuseAll = false;
     let sourceVersion = null;
 
-    if (latestVersionData && latestVersionData.metadata.content_hash === currentHash) {
+    // If we skipped building, we definitely want to reuse
+    if (skipBuild) {
+      canReuseAll = true;
+      if (latestVersionData) {
+        sourceVersion = latestVersionData.version;
+        spinner.update({ text: `♻️  No .go files changed, reusing all binaries from v${sourceVersion}` });
+      } else {
+        throw new Error('No previous version found to reuse binaries from');
+      }
+    } else if (latestVersionData && latestVersionData.metadata.content_hash === currentHash) {
       canReuseAll = true;
       sourceVersion = latestVersionData.version;
       spinner.update({ text: `♻️  Content unchanged, reusing all binaries from v${sourceVersion}` });
@@ -804,37 +824,48 @@ if (mode === 'dev') {
       changelogData = await parseLatestChangelogEntry();
       const { version, summary, description } = changelogData;
 
+      let skipBuild = false;
+      
       if (shouldBuild) {
-        // Check if we need to build by comparing content hash with latest version
-        if (shouldUploadR2) {
-          const requiredEnvVars = ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME', 'R2_ENDPOINT'];
-          const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-          
-          if (missingVars.length === 0) {
-            const awsEnv = {
-              ...process.env,
-              AWS_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
-              AWS_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
-              AWS_DEFAULT_REGION: 'auto'
-            };
+        // First check if any .go files have changed
+        const hasGoChanges = await hasGoFileChanges();
+        
+        if (!hasGoChanges) {
+          console.log(green('♻️  No .go files changed, skipping build entirely'));
+          skipBuild = true;
+        } else {
+          // Check if we need to build by comparing content hash with latest version
+          if (shouldUploadR2) {
+            const requiredEnvVars = ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME', 'R2_ENDPOINT'];
+            const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
             
-            const bucket = process.env.R2_BUCKET_NAME;
-            const endpoint = process.env.R2_ENDPOINT;
-            
-            console.log(cyan('🔍 Checking if build is needed...'));
-            const currentHash = await calculateContentHash();
-            const latestVersionData = await getLatestVersionMetadata(awsEnv, bucket, endpoint);
-            
-            if (latestVersionData && latestVersionData.metadata.content_hash === currentHash) {
-              console.log(green(`♻️  Content unchanged (hash: ${currentHash.substring(0, 8)}...), skipping build`));
+            if (missingVars.length === 0) {
+              const awsEnv = {
+                ...process.env,
+                AWS_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
+                AWS_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
+                AWS_DEFAULT_REGION: 'auto'
+              };
+              
+              const bucket = process.env.R2_BUCKET_NAME;
+              const endpoint = process.env.R2_ENDPOINT;
+              
+              console.log(cyan('🔍 Checking if build is needed...'));
+              const currentHash = await calculateContentHash();
+              const latestVersionData = await getLatestVersionMetadata(awsEnv, bucket, endpoint);
+              
+              if (latestVersionData && latestVersionData.metadata.content_hash === currentHash) {
+                console.log(green(`♻️  Content unchanged (hash: ${currentHash.substring(0, 8)}...), skipping build`));
+                skipBuild = true;
+              } else {
+                await buildCrossPlatform(version);
+              }
             } else {
               await buildCrossPlatform(version);
             }
           } else {
             await buildCrossPlatform(version);
           }
-        } else {
-          await buildCrossPlatform(version);
         }
       }
 
@@ -858,7 +889,7 @@ if (mode === 'dev') {
       }
 
       if (shouldUploadR2) {
-        await uploadToR2(version);
+        await uploadToR2(version, skipBuild);
       }
     }
 

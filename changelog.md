@@ -1,3 +1,9 @@
+# 0.4.8 - Update: cicd.js binary reuse 5
+- hasGoFileChanges() function - Checks git status --porcelain for any .go file modifications
+- Early exit in build logic - If no .go files changed, skip building entirely
+- skipBuild parameter - Pass this flag to uploadToR2() to force reuse path
+- Smart reuse logic - When skipBuild=true, always use S3 copy from previous version
+
 # 0.4.7 - Update: cicd.js binary reuse 4
 - Single storage location: Only /releases/v{version}/ - eliminated /binaries/ folder entirely
 - Content-based hashing: Calculate hash of all Go source files (not per-platform)
