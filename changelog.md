@@ -1,3 +1,6 @@
+# 0.4.14 - Update: cicd.js, metadata.json file
+- added release summary and description to metadata.json
+
 # 0.4.13 - Fix: cicd.js using binary-mapping.json 2
 - list all binaries and pick the one with latest semver
 

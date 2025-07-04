@@ -606,18 +606,21 @@ async function findLatestVersionWithBinary(awsEnv, bucket, endpoint, platform, _
 /**
  * Uploads binaries to Cloudflare R2 with smart reuse from previous versions.
  *
+ * @param {string}  version
+ * @param {boolean} [skipBuild=false]           If true, skip building; always reuse binaries.
+ * @param {string}  [releaseSummary=null]       Short summary from changelog.
+ * @param {string}  [releaseDescription=null]   Long description / bullet list from changelog.
+ *
  * OPTIMIZATION: Instead of copying unchanged binaries to each new version folder,
  * this function maintains a global binary-mapping.json that tracks where each
  * platform's binary actually exists. This saves significant R2 storage space
  * and speeds up deployment by avoiding redundant uploads.
  *
  * SIMPLE APPROACH: binary-mapping.json is the source of truth showing where
- * binaries actually exist. metadata.json can show reference info, but install.sh
- * always uses binary-mapping.json to find the real files.
- *
- * The binary-mapping.json file is saved locally for git commit tracking.
+ * binaries actually exist. metadata.json now also carries release notes to make
+ * it a more useful artifact for consumers / dashboards.
  */
-async function uploadToR2(version, skipBuild = false) {
+async function uploadToR2(version, skipBuild = false, releaseSummary = null, releaseDescription = null) {
   const spinner = createBunSpinner(`☁️ Uploading binaries to Cloudflare R2...`).start();
 
   try {
@@ -684,6 +687,8 @@ async function uploadToR2(version, skipBuild = false) {
       version: version,
       created_at: new Date().toISOString(),
       content_hash: currentHash,
+      release_summary: releaseSummary,
+      release_description: releaseDescription,
       binaries: {},
       binary_source_versions: {}
     };
@@ -1160,7 +1165,7 @@ if (mode === 'dev') {
       }
 
       if (shouldUploadR2) {
-        await uploadToR2(version, skipBuild);
+        await uploadToR2(version, skipBuild, summary, description);
       }
 
       if (shouldCommit) {

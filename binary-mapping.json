@@ -1,6 +1,6 @@
 {
-  "last_updated": "2025-07-04T16:11:19.080Z",
-  "latest_version": "0.4.13",
+  "last_updated": "2025-07-04T16:16:57.861Z",
+  "latest_version": "0.4.14",
   "binary_sources": {
     "darwin-amd64": "0.4.8",
     "darwin-arm64": "0.4.8",
