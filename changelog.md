@@ -1,3 +1,6 @@
+# 0.4.4 - Update: cicd.js binary reuse
+- previously binary reuse wasn't implemented
+
 # 0.4.3 - Fix: install.sh
 - removed "-e" prefix
 - binary reuse if it didn't change

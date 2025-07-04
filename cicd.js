@@ -433,7 +433,26 @@ async function buildLocal() {
   }
 }
 
-/** Uploads binaries to Cloudflare R2 */
+/** Calculates SHA256 hash of a file */
+async function calculateFileHash(filePath) {
+  const hasher = new Bun.CryptoHasher("sha256");
+  const file = Bun.file(filePath);
+  const arrayBuffer = await file.arrayBuffer();
+  hasher.update(new Uint8Array(arrayBuffer));
+  return hasher.digest("hex");
+}
+
+/** Checks if a binary with the same hash already exists in R2 */
+async function checkExistingBinary(hash, awsEnv, bucket, endpoint) {
+  const binaryPath = `binaries/code4context-${hash}`;
+  const checkResult = await $`aws s3 ls s3://${bucket}/${binaryPath} --endpoint-url ${endpoint}`
+    .env(awsEnv)
+    .nothrow();
+  
+  return checkResult.exitCode === 0;
+}
+
+/** Uploads binaries to Cloudflare R2 with hash-based deduplication */
 async function uploadToR2(version) {
   const spinner = createBunSpinner(`☁️ Uploading binaries to Cloudflare R2...`).start();
 
@@ -466,24 +485,87 @@ async function uploadToR2(version) {
       AWS_DEFAULT_REGION: 'auto'
     };
 
-    // Upload each binary
+    // Get binary files
     const binFiles = await $`ls bin/`.env(awsEnv).nothrow();
     if (binFiles.exitCode !== 0) {
       throw new Error('No binaries found in bin/ directory');
     }
 
     const files = binFiles.stdout.toString().trim().split('\n').filter(f => f.trim());
+    const metadata = {};
 
+    // Process each binary with hash-based deduplication
     for (const file of files) {
-      spinner.update({ text: `📤 Uploading ${file}...` });
+      spinner.update({ text: `🔍 Processing ${file}...` });
 
-      const uploadResult = await $`aws s3 cp bin/${file} s3://${bucket}/${versionPath}/${file} --endpoint-url ${endpoint}`
+      const filePath = `bin/${file}`;
+      const hash = await calculateFileHash(filePath);
+      const platform = file.replace('code4context-', '').replace('.exe', '');
+      
+      // Check if binary with this hash already exists
+      const binaryExists = await checkExistingBinary(hash, awsEnv, bucket, endpoint);
+      
+      if (binaryExists) {
+        spinner.update({ text: `♻️  Reusing existing binary for ${file} (hash: ${hash.substring(0, 8)}...)` });
+        
+        // Create metadata entry pointing to existing binary
+        const baseUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.${endpoint.replace('https://', '')}`;
+        metadata[platform] = {
+          hash: hash,
+          binary_url: `${baseUrl}/binaries/code4context-${hash}`,
+          reused: true
+        };
+      } else {
+        spinner.update({ text: `📤 Uploading new binary ${file}...` });
+        
+        // Upload to hash-based location
+        const hashBinaryPath = `binaries/code4context-${hash}`;
+        const uploadResult = await $`aws s3 cp ${filePath} s3://${bucket}/${hashBinaryPath} --endpoint-url ${endpoint}`
+          .env(awsEnv)
+          .nothrow();
+
+        if (uploadResult.exitCode !== 0) {
+          throw new Error(`Failed to upload ${file}: ${uploadResult.stderr.toString()}`);
+        }
+
+        // Create metadata entry
+        const baseUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.${endpoint.replace('https://', '')}`;
+        metadata[platform] = {
+          hash: hash,
+          binary_url: `${baseUrl}/binaries/code4context-${hash}`,
+          reused: false
+        };
+      }
+
+      // Also upload to version-specific path for backward compatibility
+      spinner.update({ text: `📋 Creating version-specific reference for ${file}...` });
+      const versionUploadResult = await $`aws s3 cp ${filePath} s3://${bucket}/${versionPath}/${file} --endpoint-url ${endpoint}`
         .env(awsEnv)
         .nothrow();
 
-      if (uploadResult.exitCode !== 0) {
-        throw new Error(`Failed to upload ${file}: ${uploadResult.stderr.toString()}`);
+      if (versionUploadResult.exitCode !== 0) {
+        throw new Error(`Failed to upload version-specific ${file}: ${versionUploadResult.stderr.toString()}`);
       }
+    }
+
+    // Create and upload metadata.json
+    spinner.update({ text: `📋 Creating metadata.json...` });
+
+    const metadataContent = {
+      version: version,
+      created_at: new Date().toISOString(),
+      binaries: metadata
+    };
+
+    const metadataFile = `metadata-${version}.json`;
+    await fs.writeFile(metadataFile, JSON.stringify(metadataContent, null, 2));
+
+    const metadataUploadResult = await $`aws s3 cp ${metadataFile} s3://${bucket}/${versionPath}/metadata.json --endpoint-url ${endpoint}`
+      .env(awsEnv)
+      .nothrow();
+
+    if (metadataUploadResult.exitCode !== 0) {
+      throw new Error(`Failed to upload metadata: ${metadataUploadResult.stderr.toString()}`);
     }
 
     // Upload latest version marker
@@ -511,22 +593,36 @@ async function uploadToR2(version) {
       throw new Error(`Failed to upload install script: ${installScriptResult.stderr.toString()}`);
     }
 
-    // Clean up temp file
-    await $`rm ${versionFile}`.nothrow();
+    // Clean up temp files
+    await $`rm ${versionFile} ${metadataFile}`.nothrow();
 
     spinner.success({ text: green(`✅ Binaries uploaded to R2 successfully`) });
 
-    // Show download URLs
+    // Show download URLs and reuse statistics
     const baseUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.${endpoint.replace('https://', '')}`;
     console.log(cyan(`🔗 Binaries available at: ${baseUrl}/${versionPath}/`));
+    console.log(cyan(`🔗 Metadata available at: ${baseUrl}/${versionPath}/metadata.json`));
     console.log(cyan(`🔗 Install script available at: ${baseUrl}/install.sh`));
 
+    // Show reuse statistics
+    const reusedCount = Object.values(metadata).filter(m => m.reused).length;
+    const newCount = Object.values(metadata).filter(m => !m.reused).length;
+    console.log(cyan(`♻️  Binary reuse: ${reusedCount} reused, ${newCount} new`));
+
     // List uploaded files
-    console.log(cyan('📦 Uploaded files:'));
+    console.log(cyan('📦 Version-specific files:'));
     files.forEach(file => {
       console.log(`  ${baseUrl}/${versionPath}/${file}`);
     });
+    console.log(`  ${baseUrl}/${versionPath}/metadata.json`);
     console.log(`  ${baseUrl}/install.sh`);
+
+    // List optimized binary URLs
+    console.log(cyan('🚀 Optimized binary URLs:'));
+    Object.entries(metadata).forEach(([platform, meta]) => {
+      const status = meta.reused ? '♻️  (reused)' : '🆕 (new)';
+      console.log(`  ${platform}: ${meta.binary_url} ${status}`);
+    });
 
   } catch (error) {
     if (spinner.isSpinning()) {
