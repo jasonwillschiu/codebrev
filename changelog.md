@@ -1,3 +1,9 @@
+# 0.4.1 - Add: install script and cicd.js
+- cicd.js to automate git operations, build and deploy
+- added install.sh for curl installation command
+- testing storing binaries in cloudflare r2
+- locally awscli is a dependency for r2
+
 # 0.4.0 - Update: refactor to mcp server
 - uses mark3labs/mcp-go now
 - todo: install and update for the mcp server

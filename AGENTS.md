@@ -7,8 +7,7 @@ This document provides guidance for LLM agents working with Code4Context and int
 Code4Context generates structured summaries of codebases specifically designed for LLM consumption. The output (`codebrev.md`) provides a hierarchical view of code structure that helps AI assistants understand:
 
 - Available functions and their signatures
-- Type definitions and relationships  
-- Variable scope and organization
+- Type definitions and relationships
 - File-by-file code organization
 
 ## Output Format
@@ -21,11 +20,9 @@ Code4Context generates structured summaries of codebases specifically designed f
 ### Functions
 - functionName(param1 type, param2 type) -> returnType
 
-### Types  
+### Types
 - TypeName (methods: method1, method2) (fields: field1, field2)
 
-### Variables
-- variableName
 ```
 
 ### Language-Specific Parsing
@@ -179,7 +176,7 @@ go run main.go /path/to/project
 
 # LLM can now understand:
 # - Available functions and their signatures
-# - Import dependencies between files  
+# - Import dependencies between files
 # - Type definitions and relationships
 # - Component structure in frontend projects
 ```

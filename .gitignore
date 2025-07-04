@@ -4,3 +4,9 @@ test-files
 code4context
 llm-context
 mcp-servers
+.env
+!.env.sample
+# Build artifacts
+bin/
+*.exe
+code4context-*
