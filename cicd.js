@@ -328,10 +328,10 @@ async function checkGitStatus() {
 async function hasGoFileChanges() {
   const { stdout, exitCode } = await $`git status --porcelain`.nothrow();
   if (exitCode !== 0) return true; // If we can't check, assume changes
-  
+
   const changes = stdout.toString().trim().split('\n').filter(line => line.trim());
   const goFileChanges = changes.filter(line => line.includes('.go'));
-  
+
   return goFileChanges.length > 0;
 }
 
@@ -458,14 +458,14 @@ async function buildLocal() {
 async function calculateContentHash() {
   // Hash only the files that actually affect the Go binary compilation
   // This excludes README, docs, install scripts, etc.
-  
+
   const hasher = new Bun.CryptoHasher("sha256");
-  
+
   // Get list of Go source files
   const goFilesResult = await $`find . -name "*.go" -not -path "./test-files/*" | sort`.nothrow();
   if (goFilesResult.exitCode === 0) {
     const goFiles = goFilesResult.stdout.toString().trim().split('\n').filter(f => f.trim());
-    
+
     for (const file of goFiles) {
       try {
         const content = await fs.readFile(file.trim(), 'utf-8');
@@ -476,7 +476,7 @@ async function calculateContentHash() {
       }
     }
   }
-  
+
   // Hash go.mod for dependency changes
   try {
     const goMod = await fs.readFile('go.mod', 'utf-8');
@@ -485,7 +485,7 @@ async function calculateContentHash() {
   } catch (e) {
     // Ignore if file doesn't exist
   }
-  
+
   // Hash go.sum for dependency lock changes
   try {
     const goSum = await fs.readFile('go.sum', 'utf-8');
@@ -494,7 +494,7 @@ async function calculateContentHash() {
   } catch (e) {
     // Ignore if file doesn't exist
   }
-  
+
   return hasher.digest("hex");
 }
 
@@ -505,22 +505,22 @@ async function getLatestVersionMetadata(awsEnv, bucket, endpoint) {
     const latestResult = await $`aws s3 cp s3://${bucket}/latest-version.txt - --endpoint-url ${endpoint}`
       .env(awsEnv)
       .nothrow();
-    
+
     if (latestResult.exitCode !== 0) {
       return null; // No previous version
     }
-    
+
     const latestVersion = latestResult.stdout.toString().trim();
-    
+
     // Get metadata for latest version
     const metadataResult = await $`aws s3 cp s3://${bucket}/releases/v${latestVersion}/metadata.json - --endpoint-url ${endpoint}`
       .env(awsEnv)
       .nothrow();
-    
+
     if (metadataResult.exitCode !== 0) {
       return null; // No metadata found
     }
-    
+
     return {
       version: latestVersion,
       metadata: JSON.parse(metadataResult.stdout.toString())
@@ -530,18 +530,91 @@ async function getLatestVersionMetadata(awsEnv, bucket, endpoint) {
   }
 }
 
-/** 
+/** Checks if a binary actually exists in R2 for a given version and platform */
+async function checkBinaryExists(awsEnv, bucket, endpoint, version, platform) {
+  try {
+    const fileName = `code4context-${platform}`;
+    const checkResult = await $`aws s3api head-object --bucket ${bucket} --key releases/v${version}/${fileName} --endpoint-url ${endpoint}`
+      .quiet()
+      .env(awsEnv)
+      .nothrow();
+
+    return checkResult.exitCode === 0;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** Finds the latest version that actually has binaries for a given platform */
+async function findLatestVersionWithBinary(awsEnv, bucket, endpoint, platform, _ignored = 0) {
+  try {
+    const objectPattern = `releases/`;
+    const listCmd = $`aws s3 ls s3://${bucket}/${objectPattern} --recursive --endpoint-url ${endpoint}`
+      .env(awsEnv)
+      .nothrow();
+
+    const listResult = await listCmd;
+    if (listResult.exitCode !== 0) {
+      return null;
+    }
+
+    const keyRegex = new RegExp(`releases/v([0-9]+\\.[0-9]+\\.[0-9]+[a-z]?)\\/code4context-${platform.replace('.', '\\.')}$`);
+    /** @type {Set<string>} */
+    const versions = new Set();
+
+    for (const line of listResult.stdout.toString().split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Example line format (aws s3 ls):
+      // 2025-07-04 14:33:07    5957442 releases/v0.4.8/code4context-darwin-arm64
+      const match = trimmed.match(keyRegex);
+      if (match && match[1]) {
+        versions.add(match[1]);
+      }
+    }
+
+    if (versions.size === 0) {
+      return null;
+    }
+
+    // Convert set to array and sort descending semver
+    const sorted = Array.from(versions).sort((a, b) => {
+      const semverToInts = (v) =>
+        v.split('.').map((part) => {
+          // Strip any trailing letters (e.g., 1.2.3a)
+          const num = part.replace(/[^\d]/g, '');
+          return parseInt(num || '0', 10);
+        });
+
+      const aParts = semverToInts(a);
+      const bParts = semverToInts(b);
+
+      for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+        const diff = (bParts[i] || 0) - (aParts[i] || 0);
+        if (diff !== 0) return diff;
+      }
+      return 0;
+    });
+
+    return sorted[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Uploads binaries to Cloudflare R2 with smart reuse from previous versions.
- * 
+ *
  * OPTIMIZATION: Instead of copying unchanged binaries to each new version folder,
  * this function maintains a global binary-mapping.json that tracks where each
  * platform's binary actually exists. This saves significant R2 storage space
  * and speeds up deployment by avoiding redundant uploads.
- * 
+ *
  * SIMPLE APPROACH: binary-mapping.json is the source of truth showing where
  * binaries actually exist. metadata.json can show reference info, but install.sh
  * always uses binary-mapping.json to find the real files.
- * 
+ *
  * The binary-mapping.json file is saved locally for git commit tracking.
  */
 async function uploadToR2(version, skipBuild = false) {
@@ -583,9 +656,9 @@ async function uploadToR2(version, skipBuild = false) {
     // Check if we can reuse binaries from the latest version
     spinner.update({ text: `🔍 Checking for reusable binaries...` });
     const latestVersionData = await getLatestVersionMetadata(awsEnv, bucket, endpoint);
-    
+
     const platforms = [
-      'darwin-amd64', 'darwin-arm64', 'linux-amd64', 
+      'darwin-amd64', 'darwin-arm64', 'linux-amd64',
       'linux-arm64', 'windows-amd64.exe', 'windows-arm64.exe'
     ];
 
@@ -620,7 +693,7 @@ async function uploadToR2(version, skipBuild = false) {
       for (const platform of platforms) {
         const fileName = `code4context-${platform}`;
         spinner.update({ text: `🔗 Referencing ${fileName} from v${sourceVersion}...` });
-        
+
         // For metadata.json: store reference info (can show immediate source)
         const baseUrl = process.env.R2_PUBLIC_URL || `https://${bucket}.${endpoint.replace('https://', '')}`;
         metadata.binaries[platform] = {
@@ -678,15 +751,15 @@ async function uploadToR2(version, skipBuild = false) {
 
     // Create/update global binary-mapping.json
     // This is the source of truth that tells install.sh where to find each platform's binary
-    spinner.update({ text: `📋 Updating binary mapping...` });
+    spinner.update({ text: `📋 Updating binary mapping with verification...` });
     const binaryMappingFile = `binary-mapping.json`;
-    
+
     // Get existing mapping or create new one
     let globalMapping = {};
     const existingMappingResult = await $`aws s3 cp s3://${bucket}/binary-mapping.json - --endpoint-url ${endpoint}`
       .env(awsEnv)
       .nothrow();
-    
+
     if (existingMappingResult.exitCode === 0) {
       try {
         globalMapping = JSON.parse(existingMappingResult.stdout.toString());
@@ -695,35 +768,60 @@ async function uploadToR2(version, skipBuild = false) {
         globalMapping = {};
       }
     }
-    
+
     // Update mapping with current version info
     globalMapping.last_updated = new Date().toISOString();
     globalMapping.latest_version = version;
     if (!globalMapping.binary_sources) {
       globalMapping.binary_sources = {};
     }
-    
+
     // For each platform, determine where the binary actually exists
     for (const platform of platforms) {
       if (canReuseAll) {
-        // If reusing, check where the source version's binary actually exists
+        // If reusing, verify the existing mapping points to a real binary
         const existingSource = globalMapping.binary_sources[platform];
         if (existingSource) {
-          // Keep pointing to the same actual location
-          globalMapping.binary_sources[platform] = existingSource;
+          // Verify the existing source actually has the binary
+          const binaryExists = await checkBinaryExists(awsEnv, bucket, endpoint, existingSource, platform);
+          if (binaryExists) {
+            // Keep pointing to the verified location
+            globalMapping.binary_sources[platform] = existingSource;
+          } else {
+            // Find the latest version that actually has this binary
+            spinner.update({ text: `🔍 Finding latest version with ${platform} binary...` });
+            const actualSource = await findLatestVersionWithBinary(awsEnv, bucket, endpoint, platform);
+            if (actualSource) {
+              globalMapping.binary_sources[platform] = actualSource;
+              console.log(green(`✅ Found ${platform} binary in v${actualSource}`));
+            } else {
+              // Fallback to source version if no existing binary found
+              globalMapping.binary_sources[platform] = sourceVersion;
+              console.log(yellow(`⚠️  No existing ${platform} binary found, using v${sourceVersion}`));
+            }
+          }
         } else {
-          // Fallback to source version if no existing mapping
-          globalMapping.binary_sources[platform] = sourceVersion;
+          // No existing mapping, find the latest version with this binary
+          spinner.update({ text: `🔍 Finding latest version with ${platform} binary...` });
+          const actualSource = await findLatestVersionWithBinary(awsEnv, bucket, endpoint, platform);
+          if (actualSource) {
+            globalMapping.binary_sources[platform] = actualSource;
+            console.log(green(`✅ Found ${platform} binary in v${actualSource}`));
+          } else {
+            // Fallback to source version if no existing binary found
+            globalMapping.binary_sources[platform] = sourceVersion;
+            console.log(yellow(`⚠️  No existing ${platform} binary found, using v${sourceVersion}`));
+          }
         }
       } else {
         // New binaries are uploaded to current version
         globalMapping.binary_sources[platform] = version;
       }
     }
-    
+
     // Save to local repo for git commit
     await fs.writeFile(binaryMappingFile, JSON.stringify(globalMapping, null, 2));
-    
+
     // Upload to R2
     const mappingUploadResult = await $`aws s3 cp ${binaryMappingFile} s3://${bucket}/binary-mapping.json --endpoint-url ${endpoint}`
       .env(awsEnv)
@@ -785,7 +883,7 @@ async function uploadToR2(version, skipBuild = false) {
 function showInstallationGuide() {
   console.log(bold(green("🚀 Code4Context Installation Guide for AI Coding Tools")));
   console.log("");
-  
+
   // Installation first
   console.log(bold(cyan("📦 Step 1: Install Code4Context Binary")));
   console.log("");
@@ -795,11 +893,11 @@ function showInstallationGuide() {
   console.log(yellow("Or download manually from:"));
   console.log(`  ${green("https://github.com/jasonwillschiu/code4context-com/releases")}`);
   console.log("");
-  
+
   // Configuration for each tool
   console.log(bold(cyan("📱 Step 2: Configure Your AI Tool")));
   console.log("");
-  
+
   // OpenCode
   console.log(bold(yellow("OpenCode:")));
   console.log(yellow("Create or edit your opencode.json file:"));
@@ -816,7 +914,7 @@ function showInstallationGuide() {
   }
 }`));
   console.log("");
-  
+
   // Claude Code
   console.log(bold(yellow("Claude Code:")));
   console.log(yellow("Add the MCP server using the binary path:"));
@@ -828,7 +926,7 @@ function showInstallationGuide() {
   console.log(yellow("For SSE transport:"));
   console.log(`  ${green("claude mcp add --transport sse code4context https://your-server.com/sse")}`);
   console.log("");
-  
+
   // Cursor
   console.log(bold(yellow("Cursor:")));
   console.log(yellow("Create or edit your mcp.json file:"));
@@ -850,7 +948,7 @@ function showInstallationGuide() {
   }
 }`));
   console.log("");
-  
+
   // Usage tips
   console.log(bold(cyan("💡 Usage Tips")));
   console.log("");
@@ -859,7 +957,7 @@ function showInstallationGuide() {
   console.log(yellow("• Provides function signatures, types, and file organization"));
   console.log(yellow("• Use in prompts: 'analyze this codebase using code4context'"));
   console.log("");
-  
+
   // Binary usage
   console.log(bold(cyan("🔧 Binary Usage")));
   console.log("");
@@ -872,7 +970,7 @@ function showInstallationGuide() {
   console.log(yellow("Check version:"));
   console.log(`  ${green("./code4context --version")}`);
   console.log("");
-  
+
   // Path examples
   console.log(bold(cyan("📍 Common Installation Paths")));
   console.log("");
@@ -888,7 +986,7 @@ function showInstallationGuide() {
   console.log(yellow("Or if in PATH, just:"));
   console.log(`  ${green("code4context")}`);
   console.log("");
-  
+
   console.log(bold(green("✅ Ready to enhance your AI coding experience!")));
   console.log(cyan("📚 For more details, visit: https://github.com/jasonwillschiu/code4context-com"));
 }
@@ -1017,11 +1115,11 @@ if (mode === 'dev') {
       const { version, summary, description } = changelogData;
 
       let skipBuild = false;
-      
+
       if (shouldBuild) {
         // First check if any .go files have changed
         const hasGoChanges = await hasGoFileChanges();
-        
+
         if (!hasGoChanges) {
           console.log(green('♻️  No .go files changed, skipping build entirely'));
           skipBuild = true;
@@ -1030,7 +1128,7 @@ if (mode === 'dev') {
           if (shouldUploadR2) {
             const requiredEnvVars = ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_NAME', 'R2_ENDPOINT'];
             const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-            
+
             if (missingVars.length === 0) {
               const awsEnv = {
                 ...process.env,
@@ -1038,14 +1136,14 @@ if (mode === 'dev') {
                 AWS_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY,
                 AWS_DEFAULT_REGION: 'auto'
               };
-              
+
               const bucket = process.env.R2_BUCKET_NAME;
               const endpoint = process.env.R2_ENDPOINT;
-              
+
               console.log(cyan('🔍 Checking if build is needed...'));
               const currentHash = await calculateContentHash();
               const latestVersionData = await getLatestVersionMetadata(awsEnv, bucket, endpoint);
-              
+
               if (latestVersionData && latestVersionData.metadata.content_hash === currentHash) {
                 console.log(green(`♻️  Content unchanged (hash: ${currentHash.substring(0, 8)}...), skipping build`));
                 skipBuild = true;

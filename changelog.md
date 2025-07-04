@@ -1,3 +1,6 @@
+# 0.4.13 - Fix: cicd.js using binary-mapping.json 2
+- list all binaries and pick the one with latest semver
+
 # 0.4.12 - Fix: cicd.js using binary-mapping.json
 - 0.4.11 wouldn't install still, references releases/v0.4.11 where there is no binary
 
