@@ -298,7 +298,18 @@ func parseTypeScriptContentRegex(content string, out *outline.Outline, fileInfo 
 		typeInfo.Methods = append(typeInfo.Methods, classMethods...)
 	}
 
-	// Add imports as a special type
+	// Process imports and dependencies
+	for _, imp := range imports {
+		fileInfo.Imports = append(fileInfo.Imports, imp)
+
+		// Check if it's a local import (relative path)
+		if strings.HasPrefix(imp, "./") || strings.HasPrefix(imp, "../") {
+			fileInfo.LocalDeps = append(fileInfo.LocalDeps, imp)
+			out.AddDependency(fileInfo.Path, imp)
+		}
+	}
+
+	// Add imports as a special type for backward compatibility
 	if len(imports) > 0 {
 		importStr := "IMPORTS: " + strings.Join(removeDuplicateStrings(imports), ", ")
 		fileInfo.Types = append(fileInfo.Types, importStr)

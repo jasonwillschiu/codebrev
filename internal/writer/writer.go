@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"code4context/internal/mermaid"
 	"code4context/internal/outline"
 )
 
@@ -24,6 +25,21 @@ func WriteOutlineToFile(out *outline.Outline) error {
 	fmt.Fprintln(writer, "# Code Structure Outline")
 	fmt.Fprintln(writer, "")
 	fmt.Fprintln(writer, "This file provides an overview of available functions, types, and variables per file for LLM context.")
+	fmt.Fprintln(writer, "")
+
+	// Generate and include mermaid diagrams
+	fmt.Fprintln(writer, "## File Dependency Graph (LLM Context)")
+	fmt.Fprintln(writer, "")
+	fmt.Fprintln(writer, "This diagram shows direct file-to-file dependencies to help understand which files are related and may need coordinated changes.")
+	fmt.Fprintln(writer, "")
+	fmt.Fprint(writer, mermaid.GenerateFileDependencyGraph(out))
+	fmt.Fprintln(writer, "")
+
+	fmt.Fprintln(writer, "## Architecture Overview (Human Context)")
+	fmt.Fprintln(writer, "")
+	fmt.Fprintln(writer, "This diagram provides a high-level view of the codebase structure with directory groupings and external dependencies.")
+	fmt.Fprintln(writer, "")
+	fmt.Fprint(writer, mermaid.GenerateArchitectureOverview(out))
 	fmt.Fprintln(writer, "")
 
 	// Sort file paths for consistent output
@@ -108,6 +124,21 @@ func WriteOutlineToFileWithPath(out *outline.Outline, filePath string) error {
 	fmt.Fprintln(writer, "# Code Structure Outline")
 	fmt.Fprintln(writer, "")
 	fmt.Fprintln(writer, "This file provides an overview of available functions, types, and variables per file for LLM context.")
+	fmt.Fprintln(writer, "")
+
+	// Generate and include mermaid diagrams
+	fmt.Fprintln(writer, "## File Dependency Graph (LLM Context)")
+	fmt.Fprintln(writer, "")
+	fmt.Fprintln(writer, "This diagram shows direct file-to-file dependencies to help understand which files are related and may need coordinated changes.")
+	fmt.Fprintln(writer, "")
+	fmt.Fprint(writer, mermaid.GenerateFileDependencyGraph(out))
+	fmt.Fprintln(writer, "")
+
+	fmt.Fprintln(writer, "## Architecture Overview (Human Context)")
+	fmt.Fprintln(writer, "")
+	fmt.Fprintln(writer, "This diagram provides a high-level view of the codebase structure with directory groupings and external dependencies.")
+	fmt.Fprintln(writer, "")
+	fmt.Fprint(writer, mermaid.GenerateArchitectureOverview(out))
 	fmt.Fprintln(writer, "")
 
 	// Sort file paths for consistent output

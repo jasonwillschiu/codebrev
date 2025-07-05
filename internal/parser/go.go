@@ -18,6 +18,22 @@ func parseGoFile(path string, out *outline.Outline, fileInfo *outline.FileInfo, 
 		return nil
 	}
 
+	// Process imports first
+	for _, imp := range file.Imports {
+		importPath := strings.Trim(imp.Path.Value, "\"")
+		fileInfo.Imports = append(fileInfo.Imports, importPath)
+
+		// Check if it's a local import
+		if strings.HasPrefix(importPath, "code4context/") {
+			// Convert import path to actual file paths that exist
+			localPath := strings.TrimPrefix(importPath, "code4context/")
+
+			// For Go packages, we need to find the actual files in that directory
+			// For now, let's track the package dependency
+			fileInfo.LocalDeps = append(fileInfo.LocalDeps, localPath)
+			out.AddDependency(path, localPath)
+		}
+	}
 	ast.Inspect(file, func(n ast.Node) bool {
 		switch d := n.(type) {
 

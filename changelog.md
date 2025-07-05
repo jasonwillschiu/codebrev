@@ -1,3 +1,8 @@
+# 0.5.0 - Add: mermaid diagram generator
+- mermaid diagram1 is file level dependencies
+- mermaid diagram2 is a for-human, architectural overview
+- neither is perfect yet, and I think the for-human view might be all we need
+
 # 0.4.14 - Update: cicd.js, metadata.json file
 - added release summary and description to metadata.json
 
