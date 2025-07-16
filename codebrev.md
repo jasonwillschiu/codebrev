@@ -8,54 +8,59 @@ This diagram shows direct file-to-file dependencies to help understand which fil
 
 ```mermaid
 graph TD
-    F0["cicd.js"]
-    F1["generate_codebrev.go"]
-    F2["gitignore/gitignore.go"]
-    F3["mermaid/generator.go"]
-    F4["outline/dedup.go"]
-    F5["outline/types.go"]
-    F6["parser/astro.go"]
-    F7["parser/go.go"]
-    F8["parser/parser.go"]
-    F9["writer/writer.go"]
-    F10["main.go"]
-    F11["FAQSection.astro"]
-    F12["FeaturesSection.astro"]
-    F13["GoogleAnalytics.astro"]
-    F14["Navbar.tsx"]
-    F15["OptimizedImage.astro"]
-    F16["PricingSection.astro"]
-    F17["TestimonialsSection.astro"]
-    F18["AppSummary.tsx"]
-    F19["PerplexityStyleForm.tsx"]
-    F20["ResultsDisplay.tsx"]
-    F21["SummaryDisplay.tsx"]
-    F22["TranscriptDisplay.tsx"]
-    F23["Base.astro"]
-    F24["Layout.astro"]
-    F25["MarkdownLayout.astro"]
-    F26["api.ts"]
-    F27["schema.ts"]
-    F28["app.astro"]
-    F29["index.astro"]
-    F30["features.astro"]
-    F31["index.astro"]
-    F32["pricing.astro"]
-    F33["cicd1.js"]
+    F0["cicd.js"]:::lowRisk
+    F1["gitignore/gitignore.go"]:::lowRisk
+    F2["mermaid/generator.go"]:::lowRisk
+    F3["outline/dedup.go"]:::lowRisk
+    F4["outline/types.go"]:::lowRisk
+    F5["parser/astro.go"]:::lowRisk
+    F6["parser/go.go"]:::lowRisk
+    F7["parser/parser.go"]:::lowRisk
+    F8["writer/writer.go"]:::lowRisk
+    F9["main.go"]:::lowRisk
+    F10["FAQSection.astro"]:::lowRisk
+    F11["FeaturesSection.astro"]:::lowRisk
+    F12["GoogleAnalytics.astro"]:::lowRisk
+    F13["Navbar.tsx"]:::lowRisk
+    F14["OptimizedImage.astro"]:::lowRisk
+    F15["PricingSection.astro"]:::lowRisk
+    F16["TestimonialsSection.astro"]:::lowRisk
+    F17["AppSummary.tsx"]:::lowRisk
+    F18["PerplexityStyleForm.tsx"]:::lowRisk
+    F19["ResultsDisplay.tsx"]:::lowRisk
+    F20["SummaryDisplay.tsx"]:::lowRisk
+    F21["TranscriptDisplay.tsx"]:::lowRisk
+    F22["Base.astro"]:::lowRisk
+    F23["Layout.astro"]:::lowRisk
+    F24["MarkdownLayout.astro"]:::lowRisk
+    F25["api.ts"]:::mediumRisk
+    F26["schema.ts"]:::lowRisk
+    F27["app.astro"]:::lowRisk
+    F28["index.astro"]:::lowRisk
+    F29["features.astro"]:::lowRisk
+    F30["index.astro"]:::lowRisk
+    F31["pricing.astro"]:::lowRisk
 
-    F1 --> F5
-    F1 --> F6
-    F1 --> F9
-    F3 --> F4
-    F6 --> F4
-    F7 --> F4
-    F8 --> F2
-    F8 --> F5
+    F2 --> F4
+    F5 --> F3
+    F6 --> F3
+    F7 --> F1
+    F7 --> F3
+    F8 ==> F2
+    F8 --> F3
     F9 --> F3
-    F9 --> F4
-    F10 --> F5
-    F10 --> F7
-    F10 --> F9
+    F9 --> F6
+    F9 --> F8
+    F17 --> F25
+    F18 --> F25
+    F19 --> F21
+    F19 --> F20
+    F27 --> F22
+    F27 --> F17
+
+    classDef highRisk fill:#ffcccc,stroke:#ff0000,stroke-width:2px
+    classDef mediumRisk fill:#fff3cd,stroke:#ffc107,stroke-width:2px
+    classDef lowRisk fill:#d4edda,stroke:#28a745,stroke-width:2px
 ```
 
 ## Architecture Overview (Human Context)
@@ -89,81 +94,242 @@ graph TB
 
     subgraph root ["root"]
         N8["cicd.js"]
-        N9["generate_codebrev.go"]
-        N10["main.go"]
+        N9["main.go"]
     end
 
     subgraph test-files_frontend4_src_components ["test-files/frontend4/src/components"]
-        N11["FAQSection.astro"]
-        N12["FeaturesSection.astro"]
-        N13["GoogleAnalytics.astro"]
-        N14["Navbar.tsx"]
-        N15["OptimizedImage.astro"]
-        N16["PricingSection.astro"]
-        N17["TestimonialsSection.astro"]
+        N10["FAQSection.astro"]
+        N11["FeaturesSection.astro"]
+        N12["GoogleAnalytics.astro"]
+        N13["Navbar.tsx"]
+        N14["OptimizedImage.astro"]
+        N15["PricingSection.astro"]
+        N16["TestimonialsSection.astro"]
     end
 
     subgraph test-files_frontend4_src_components_app ["test-files/frontend4/src/components/app"]
-        N18["AppSummary.tsx"]
-        N19["PerplexityStyleForm.tsx"]
-        N20["ResultsDisplay.tsx"]
-        N21["SummaryDisplay.tsx"]
-        N22["TranscriptDisplay.tsx"]
+        N17["AppSummary.tsx"]
+        N18["PerplexityStyleForm.tsx"]
+        N19["ResultsDisplay.tsx"]
+        N20["SummaryDisplay.tsx"]
+        N21["TranscriptDisplay.tsx"]
     end
 
     subgraph test-files_frontend4_src_layouts ["test-files/frontend4/src/layouts"]
-        N23["Base.astro"]
-        N24["Layout.astro"]
-        N25["MarkdownLayout.astro"]
+        N22["Base.astro"]
+        N23["Layout.astro"]
+        N24["MarkdownLayout.astro"]
     end
 
     subgraph test-files_frontend4_src_lib ["test-files/frontend4/src/lib"]
-        N26["api.ts"]
-        N27["schema.ts"]
+        N25["api.ts"]
+        N26["schema.ts"]
     end
 
     subgraph test-files_frontend4_src_pages ["test-files/frontend4/src/pages"]
-        N28["app.astro"]
-        N29["features.astro"]
-        N30["index.astro"]
-        N31["pricing.astro"]
+        N27["app.astro"]
+        N28["features.astro"]
+        N29["index.astro"]
+        N30["pricing.astro"]
     end
 
     subgraph test-files_frontend4_src_pages_blog ["test-files/frontend4/src/pages/blog"]
-        N32["index.astro"]
-    end
-
-    subgraph test-files_onefile ["test-files/onefile"]
-        N33["cicd1.js"]
+        N31["index.astro"]
     end
 
     subgraph external ["External Dependencies"]
-        EXT0["@modular-forms/solid"]
-        EXT1["~/components/app/AppSu..."]
-        EXT2["@solid-primitives/resi..."]
-        EXT3["go/ast"]
-        EXT4["mark3labs/mcp-go/mcp"]
-        EXT5["~icons/carbon/copy-file"]
-        EXT6["astro:assets"]
-        EXT7["regexp"]
-        EXT8["solid-js/web"]
-        EXT9["~/components/app/Summa..."]
+        EXT0["path/filepath"]
+        EXT1["bufio"]
+        EXT2["regexp"]
+        EXT3["astro:assets"]
+        EXT4["solid-js/web"]
+        EXT5["@kobalte/core/select"]
+        EXT6["go/parser"]
+        EXT7["sort"]
+        EXT8["flag"]
+        EXT9["runtime"]
     end
 
-    N6 --> N0
-    N6 --> N3
-    N7 --> N1
-    N7 --> N3
-    N5 --> N2
-    N10 --> N3
-    N10 --> N5
-    N10 --> N7
     N4 --> N3
     N1 --> N2
-    N9 --> N3
-    N9 --> N4
+    N7 --> N1
+    N7 --> N2
+    N19 --> N21
+    N19 --> N20
+    N9 --> N2
+    N9 --> N5
     N9 --> N7
+    N17 --> N25
+    N18 --> N25
+    N5 --> N2
+    N6 --> N0
+    N6 --> N2
+    N27 --> N22
+    N27 --> N17
 ```
+
+## AI Agent Guidelines
+
+### Safe to modify:
+- Add new functions to existing files
+- Modify function implementations (check dependents first)
+- Add new types that don't break existing interfaces
+
+### Requires careful analysis:
+- Changing function signatures (check all callers)
+- Modifying type definitions (check all usage)
+- Adding new dependencies (check for circular deps)
+
+### High-risk changes:
+- Modifying core types: FileInfo, Outline, error, outline
+- Changing package structure
+- Removing public APIs
+
+## Change Impact Analysis
+
+### Medium-Risk Files:
+- **test-files/frontend4/src/lib/api.ts**: 2 direct + 3 indirect dependents
+
+## Public API Surface
+
+These are the public functions and types that can be safely used by other files:
+
+### internal/gitignore/gitignore.go
+- New
+- type:Gitignore
+- type:Pattern
+
+### internal/mermaid/generator.go
+- GenerateArchitectureOverview
+- GenerateFileDependencyGraph
+
+### internal/outline/types.go
+- New
+- type:FileInfo
+- type:FunctionInfo
+- type:ImpactInfo
+- type:Outline
+- type:TestInfo
+- type:TypeInfo
+
+### internal/parser/parser.go
+- ProcessFiles
+
+### internal/writer/writer.go
+- WriteOutlineToFile
+- WriteOutlineToFileWithPath
+
+## Reverse Dependencies
+
+Files that depend on each file (useful for understanding change impact):
+
+### ../../layouts/Base.astro is used by:
+- test-files/frontend4/src/pages/blog/index.astro
+
+### ../components/FAQSection.astro is used by:
+- test-files/frontend4/src/pages/pricing.astro
+
+### ../components/FeaturesSection.astro is used by:
+- test-files/frontend4/src/pages/features.astro
+
+### ../components/GoogleAnalytics.astro is used by:
+- test-files/frontend4/src/layouts/Base.astro
+
+### ../components/Navbar.tsx is used by:
+- test-files/frontend4/src/layouts/Base.astro
+
+### ../components/PricingSection.astro is used by:
+- test-files/frontend4/src/pages/pricing.astro
+
+### ../components/TestimonialsSection.astro is used by:
+- test-files/frontend4/src/pages/features.astro
+- test-files/frontend4/src/pages/pricing.astro
+
+### ../layouts/Base.astro is used by:
+- test-files/frontend4/src/pages/features.astro
+- test-files/frontend4/src/pages/index.astro
+- test-files/frontend4/src/pages/pricing.astro
+
+### ./Base.astro is used by:
+- test-files/frontend4/src/layouts/MarkdownLayout.astro
+
+### ./api is used by:
+- test-files/frontend4/src/lib/schema.ts
+
+### ./schema is used by:
+- test-files/frontend4/src/lib/api.ts
+
+### internal/gitignore is used by:
+- internal/parser/parser.go
+
+### internal/mermaid is used by:
+- internal/writer/writer.go
+
+### internal/outline is used by:
+- internal/mermaid/generator.go
+- internal/parser/astro.go
+- internal/parser/go.go
+- internal/parser/parser.go
+- internal/writer/writer.go
+- main.go
+
+### internal/parser is used by:
+- main.go
+
+### internal/writer is used by:
+- main.go
+
+### test-files/frontend4/src/components/app/AppSummary.tsx is used by:
+- test-files/frontend4/src/pages/app.astro
+
+### test-files/frontend4/src/components/app/SummaryDisplay.tsx is used by:
+- test-files/frontend4/src/components/app/ResultsDisplay.tsx
+
+### test-files/frontend4/src/components/app/TranscriptDisplay.tsx is used by:
+- test-files/frontend4/src/components/app/ResultsDisplay.tsx
+
+### test-files/frontend4/src/layouts/Base.astro is used by:
+- test-files/frontend4/src/pages/app.astro
+
+### test-files/frontend4/src/lib/api.ts is used by:
+- test-files/frontend4/src/components/app/AppSummary.tsx
+- test-files/frontend4/src/components/app/PerplexityStyleForm.tsx
+
+### ~/components/app/AppSummary.tsx is used by:
+- test-files/frontend4/src/pages/app.astro
+
+### ~/components/app/SummaryDisplay is used by:
+- test-files/frontend4/src/components/app/ResultsDisplay.tsx
+
+### ~/components/app/TranscriptDisplay is used by:
+- test-files/frontend4/src/components/app/ResultsDisplay.tsx
+
+### ~/layouts/Base.astro is used by:
+- test-files/frontend4/src/pages/app.astro
+
+### ~/lib/api is used by:
+- test-files/frontend4/src/components/app/AppSummary.tsx
+- test-files/frontend4/src/components/app/PerplexityStyleForm.tsx
+
+### ~icons/carbon/ai-recommend is used by:
+- test-files/frontend4/src/components/app/PerplexityStyleForm.tsx
+
+### ~icons/carbon/checkmark is used by:
+- test-files/frontend4/src/components/app/PerplexityStyleForm.tsx
+
+### ~icons/carbon/close is used by:
+- test-files/frontend4/src/components/app/AppSummary.tsx
+- test-files/frontend4/src/components/app/PerplexityStyleForm.tsx
+- test-files/frontend4/src/components/app/ResultsDisplay.tsx
+
+### ~icons/carbon/copy-file is used by:
+- test-files/frontend4/src/components/app/PerplexityStyleForm.tsx
+
+### ~icons/carbon/send is used by:
+- test-files/frontend4/src/components/app/PerplexityStyleForm.tsx
+
+### ~icons/carbon/text-wrap is used by:
+- test-files/frontend4/src/components/app/PerplexityStyleForm.tsx
 
 ## cicd.js
 
@@ -201,13 +367,6 @@ graph TB
 
 ---
 
-## generate_codebrev.go
-
-### Functions
-- main()
-
----
-
 ## internal/gitignore/gitignore.go
 
 ### Functions
@@ -230,7 +389,10 @@ graph TB
 ### Functions
 - GenerateArchitectureOverview(out *outline.Outline) -> string
 - GenerateFileDependencyGraph(out *outline.Outline) -> string
+- getArrowStyle(strength string) -> string
 - getCleanDepName(dep string) -> string
+- getDependencyStrength(out *outline.Outline, from string, to string) -> string
+- getNodeStyle(riskLevel string) -> string
 - getShortFileName(filePath string) -> string
 - isLocalImport(imp string) -> bool
 
@@ -248,14 +410,21 @@ graph TB
 ### Functions
 - (Outline) AddDependency(from string, to string)
 - (Outline) AddFile(path string) -> *FileInfo
+- (Outline) AddFunctionCall(caller string, callee string)
+- (Outline) AddReverseDependency(to string, from string)
+- (Outline) AddTypeUsage(typeName string, usedBy string)
+- (Outline) CalculateChangeImpact(filePath string) -> *ImpactInfo
 - (Outline) EnsureType(name string) -> *TypeInfo
+- (Outline) findIndirectDependents(filePath string, visited map[string]bool, result *[]string)
 - New() -> *Outline
 
 ### Types
-- FileInfo (fields: Path, Functions, Types, Vars, Imports, LocalDeps)
-- FunctionInfo (fields: Name, Params, ReturnType)
-- Outline (methods: RemoveDuplicates, EnsureType, AddFile, AddDependency) (fields: Files, Types, Vars, Funcs, Dependencies)
-- TypeInfo (fields: Fields, Methods)
+- FileInfo (fields: Path, Functions, Types, Vars, Imports, LocalDeps, ExportedFuncs, ExportedTypes, TestCoverage, RiskLevel)
+- FunctionInfo (fields: Name, Params, ReturnType, IsPublic, CallsTo, CalledBy, UsesTypes, LineNumber)
+- ImpactInfo (fields: DirectDependents, IndirectDependents, RiskLevel, TestsAffected)
+- Outline (methods: RemoveDuplicates, EnsureType, AddFile, AddDependency, AddReverseDependency, AddFunctionCall, AddTypeUsage, CalculateChangeImpact, findIndirectDependents) (fields: Files, Types, Vars, Funcs, Dependencies, FunctionCalls, TypeUsage, ReverseDeps, PublicAPIs, ChangeImpact)
+- TestInfo (fields: TestFiles, Coverage, TestScenarios)
+- TypeInfo (fields: Name, Fields, Methods, IsPublic, Implements, EmbeddedTypes, UsedBy, LineNumber)
 
 ---
 
@@ -278,6 +447,7 @@ graph TB
 
 ### Functions
 - extractFunctionInfo(d *ast.FuncDecl) -> outline.FunctionInfo
+- extractTypesFromExpr(expr ast.Expr) -> []string
 - parseGoFile(path string, out *outline.Outline, fileInfo *outline.FileInfo, fset *token.FileSet) -> error
 - receiverType(expr ast.Expr) -> string
 - typeToString(expr ast.Expr) -> string
@@ -289,6 +459,7 @@ graph TB
 ### Functions
 - ProcessFiles(root string, out *outline.Outline) -> error
 - processFile(path string, info os.FileInfo, out *outline.Outline, fset *token.FileSet) -> error
+- resolveAliasImports(out *outline.Outline) -> error
 
 ---
 
@@ -297,6 +468,10 @@ graph TB
 ### Functions
 - WriteOutlineToFile(out *outline.Outline) -> error
 - WriteOutlineToFileWithPath(out *outline.Outline, filePath string) -> error
+- writeAIAgentGuidance(writer *bufio.Writer, out *outline.Outline)
+- writeChangeImpactAnalysis(writer *bufio.Writer, out *outline.Outline)
+- writePublicAPISurface(writer *bufio.Writer, out *outline.Outline)
+- writeReverseDependencies(writer *bufio.Writer, out *outline.Outline)
 
 ---
 
@@ -307,6 +482,9 @@ graph TB
 - addGetCodeContextTool(s *server.MCPServer)
 - generateCodeContext(directoryPath string, outputFile string) -> error
 - main()
+- runCLIMode(args []string, outputFile string)
+- runMCPMode()
+- showHelpMessage()
 
 ---
 
@@ -547,34 +725,6 @@ graph TB
 ### Types
 - COMPONENTS: Base, PricingSection, TestimonialsSection, FAQSection
 - IMPORTS: ../layouts/Base.astro, ../components/PricingSection.astro, ../components/FAQSection.astro, ../components/TestimonialsSection.astro
-
----
-
-## test-files/onefile/cicd1.js
-
-### Functions
-- bold(text)
-- buildCrossPlatform(version = null)
-- buildLocal()
-- checkGitStatus()
-- checkGitTagExists(version)
-- createBunSpinner(initialText = "", opts = {})
-- createGitHubRelease(version, summary, description)
-- cyan(text)
-- generateLdflags(version, buildDate, gitCommit)
-- gitAdd()
-- gitCommit(summary, description)
-- gitPush()
-- gitTag(version, summary)
-- green(text)
-- mapColor(name)
-- parseLatestChangelogEntry()
-- red(text)
-- render()
-- yellow(text)
-
-### Types
-- IMPORTS: bun, path, fs/promises, util
 
 ---
 

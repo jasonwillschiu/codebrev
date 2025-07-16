@@ -302,8 +302,9 @@ func parseTypeScriptContentRegex(content string, out *outline.Outline, fileInfo 
 	for _, imp := range imports {
 		fileInfo.Imports = append(fileInfo.Imports, imp)
 
-		// Check if it's a local import (relative path)
-		if strings.HasPrefix(imp, "./") || strings.HasPrefix(imp, "../") {
+		// Check if it's a local import (relative path or alias)
+		if strings.HasPrefix(imp, "./") || strings.HasPrefix(imp, "../") || strings.HasPrefix(imp, "~") {
+			// Store the import as-is for now - ~ aliases will be resolved in a second pass
 			fileInfo.LocalDeps = append(fileInfo.LocalDeps, imp)
 			out.AddDependency(fileInfo.Path, imp)
 		}

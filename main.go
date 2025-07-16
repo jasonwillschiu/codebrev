@@ -29,12 +29,14 @@ func main() {
 	var (
 		showVersion = flag.Bool("version", false, "Show version information")
 		showHelp    = flag.Bool("help", false, "Show help information")
+		outputFile  = flag.String("output", "", "Output file path (defaults to 'codebrev.md' in target directory)")
+		mcpMode     = flag.Bool("mcp", false, "Run in MCP server mode (default behavior when no directory specified)")
 	)
 	flag.Parse()
 
 	// Handle version flag
 	if *showVersion {
-		fmt.Printf("code4context-mcp %s\n", Version)
+		fmt.Printf("code4context %s\n", Version)
 		fmt.Printf("Build Date: %s\n", BuildDate)
 		fmt.Printf("Git Commit: %s\n", GitCommit)
 		fmt.Printf("Go Version: %s\n", runtime.Version())
@@ -44,34 +46,105 @@ func main() {
 
 	// Handle help flag
 	if *showHelp {
-		fmt.Println("code4context MCP Server")
-		fmt.Println("Usage:")
-		fmt.Println("  code4context-mcp [options]")
-		fmt.Println("")
-		fmt.Println("Options:")
-		fmt.Println("  --version         Show version information")
-		fmt.Println("  --help            Show this help message")
-		fmt.Println("")
-		fmt.Println("This is an MCP (Model Context Protocol) server that provides")
-		fmt.Println("code context generation and caching tools for AI agents.")
-		fmt.Println("")
-		fmt.Println("Tools:")
-		fmt.Println("  - generate_code_context: Generate codebrev.md for a directory")
-		fmt.Println("  - get_code_context: Get cached codebrev.md or generate if missing")
-		fmt.Println("")
-		fmt.Println("---")
-		fmt.Println("")
-		fmt.Println("Claude Configuration:")
-		fmt.Println("  claude mcp add code4context -- code4context-mcp")
-		fmt.Println("")
-		fmt.Println("Cursor Configuration (in mcp.json):")
-		fmt.Println(`  "code4context": {`)
-		fmt.Println(`    "command": "code4context-mcp",`)
-		fmt.Println(`    "args": []`)
-		fmt.Println(`  }`)
+		showHelpMessage()
 		return
 	}
 
+	// Get remaining arguments (directory path)
+	args := flag.Args()
+
+	// Determine mode: CLI or MCP server
+	if *mcpMode {
+		// Explicit MCP mode requested
+		runMCPMode()
+	} else if len(args) > 0 {
+		// CLI mode: directory specified
+		runCLIMode(args, *outputFile)
+	} else {
+		// Default to MCP mode when no arguments provided
+		runMCPMode()
+	}
+}
+
+func showHelpMessage() {
+	fmt.Println("code4context - Code Context Generator")
+	fmt.Println("")
+	fmt.Println("USAGE:")
+	fmt.Println("  code4context [OPTIONS] [DIRECTORY]")
+	fmt.Println("  code4context [OPTIONS] --mcp")
+	fmt.Println("")
+	fmt.Println("MODES:")
+	fmt.Println("  CLI Mode (default when directory specified):")
+	fmt.Println("    Generate codebrev.md file for the specified directory")
+	fmt.Println("")
+	fmt.Println("  MCP Server Mode (default when no directory specified):")
+	fmt.Println("    Run as Model Context Protocol server for AI agents")
+	fmt.Println("")
+	fmt.Println("OPTIONS:")
+	fmt.Println("  --version         Show version information")
+	fmt.Println("  --help            Show this help message")
+	fmt.Println("  --output FILE     Output file path (CLI mode only)")
+	fmt.Println("  --mcp             Force MCP server mode")
+	fmt.Println("")
+	fmt.Println("EXAMPLES:")
+	fmt.Println("  code4context .                    # Generate codebrev.md for current directory")
+	fmt.Println("  code4context /path/to/project     # Generate codebrev.md for specified directory")
+	fmt.Println("  code4context --output custom.md . # Generate with custom output filename")
+	fmt.Println("  code4context --mcp                # Run as MCP server")
+	fmt.Println("")
+	fmt.Println("MCP SERVER TOOLS:")
+	fmt.Println("  - generate_code_context: Generate codebrev.md for a directory")
+	fmt.Println("  - get_code_context: Get cached codebrev.md or generate if missing")
+	fmt.Println("")
+	fmt.Println("MCP CONFIGURATION:")
+	fmt.Println("  Claude: claude mcp add code4context -- code4context")
+	fmt.Println("  Cursor (mcp.json):")
+	fmt.Println(`    "code4context": {`)
+	fmt.Println(`      "command": "code4context",`)
+	fmt.Println(`      "args": ["--mcp"]`)
+	fmt.Println(`    }`)
+}
+
+func runCLIMode(args []string, outputFile string) {
+	// Default to current directory if no directory specified
+	directoryPath := "."
+	if len(args) > 0 {
+		directoryPath = args[0]
+	}
+
+	// Set default output file if not specified
+	if outputFile == "" {
+		outputFile = filepath.Join(directoryPath, "codebrev.md")
+	}
+
+	fmt.Printf("Generating code context for: %s\n", directoryPath)
+	fmt.Printf("Output file: %s\n", outputFile)
+
+	// Check if directory exists
+	if _, err := os.Stat(directoryPath); os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "Error: directory does not exist: %s\n", directoryPath)
+		os.Exit(1)
+	}
+
+	// Generate the code context
+	err := generateCodeContext(directoryPath, outputFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating code context: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Get file size for reporting
+	fileInfo, err := os.Stat(outputFile)
+	var fileSize int64
+	if err == nil {
+		fileSize = fileInfo.Size()
+	}
+
+	fmt.Printf("Successfully generated code context outline\n")
+	fmt.Printf("File: %s (%d bytes)\n", outputFile, fileSize)
+}
+
+func runMCPMode() {
 	// Set up logging to stderr so it doesn't interfere with stdio communication
 	log.SetOutput(os.Stderr)
 	log.SetPrefix("[code4context-mcp] ")

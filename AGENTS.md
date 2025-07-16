@@ -2,6 +2,10 @@
 
 This document provides guidance for LLM agents working with Code4Context and interpreting its output.
 
+## Developer Notes
+- Don't try to read binaries (such as code4context file), they're too many tokens and you can't read them anyway
+- When testing, run the binary to generate the codebrev.md file (once that feature is implemented)
+
 ## Tool Purpose
 
 Code4Context generates structured summaries of codebases specifically designed for LLM consumption. The output (`codebrev.md`) provides a hierarchical view of code structure that helps AI assistants understand:

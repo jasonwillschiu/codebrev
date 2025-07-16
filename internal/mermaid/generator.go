@@ -28,20 +28,24 @@ func GenerateFileDependencyGraph(out *outline.Outline) string {
 	}
 	sort.Strings(allFiles)
 
-	// Create short node names for files
+	// Create short node names for files with color coding
 	for _, filePath := range allFiles {
 		shortName := getShortFileName(filePath)
 		nodeId := fmt.Sprintf("F%d", nodeCounter)
 		fileMap[filePath] = nodeId
 
-		// Add node definition with clean label
-		sb.WriteString(fmt.Sprintf("    %s[\"%s\"]\n", nodeId, shortName))
+		// Calculate risk level for color coding
+		impact := out.CalculateChangeImpact(filePath)
+		nodeStyle := getNodeStyle(impact.RiskLevel)
+
+		// Add node definition with clean label and styling
+		sb.WriteString(fmt.Sprintf("    %s[\"%s\"]%s\n", nodeId, shortName, nodeStyle))
 		nodeCounter++
 	}
 
 	sb.WriteString("\n")
 
-	// Add dependency relationships
+	// Add dependency relationships with color coding
 	for _, filePath := range allFiles {
 		fileInfo := out.Files[filePath]
 		fromNode := fileMap[filePath]
@@ -50,13 +54,18 @@ func GenerateFileDependencyGraph(out *outline.Outline) string {
 		for _, dep := range fileInfo.LocalDeps {
 			// Try direct file match first
 			if toNode, exists := fileMap[dep]; exists {
-				sb.WriteString(fmt.Sprintf("    %s --> %s\n", fromNode, toNode))
+				// Color code based on dependency strength
+				dependencyStrength := getDependencyStrength(out, filePath, dep)
+				arrowStyle := getArrowStyle(dependencyStrength)
+				sb.WriteString(fmt.Sprintf("    %s %s %s\n", fromNode, arrowStyle, toNode))
 			} else {
 				// Try to find files in the dependency package
 				for targetPath := range out.Files {
 					if strings.HasPrefix(targetPath, dep+"/") || strings.Contains(targetPath, dep) {
 						if toNode, exists := fileMap[targetPath]; exists {
-							sb.WriteString(fmt.Sprintf("    %s --> %s\n", fromNode, toNode))
+							dependencyStrength := getDependencyStrength(out, filePath, targetPath)
+							arrowStyle := getArrowStyle(dependencyStrength)
+							sb.WriteString(fmt.Sprintf("    %s %s %s\n", fromNode, arrowStyle, toNode))
 							break // Only connect to one file per package to avoid clutter
 						}
 					}
@@ -64,6 +73,12 @@ func GenerateFileDependencyGraph(out *outline.Outline) string {
 			}
 		}
 	}
+
+	// Add CSS styling for risk levels
+	sb.WriteString("\n")
+	sb.WriteString("    classDef highRisk fill:#ffcccc,stroke:#ff0000,stroke-width:2px\n")
+	sb.WriteString("    classDef mediumRisk fill:#fff3cd,stroke:#ffc107,stroke-width:2px\n")
+	sb.WriteString("    classDef lowRisk fill:#d4edda,stroke:#28a745,stroke-width:2px\n")
 	sb.WriteString("```\n")
 	return sb.String()
 }
@@ -204,9 +219,74 @@ func isLocalImport(imp string) bool {
 	if strings.HasPrefix(imp, "./") || strings.HasPrefix(imp, "../") {
 		return true
 	}
-	// JavaScript/TypeScript relative imports
-	if strings.HasPrefix(imp, ".") {
+	// JavaScript/TypeScript relative imports and aliases
+	if strings.HasPrefix(imp, ".") || strings.HasPrefix(imp, "~") {
 		return true
 	}
 	return false
+}
+
+// getDependencyStrength calculates the strength of dependency between two files
+func getDependencyStrength(out *outline.Outline, from, to string) string {
+	fromFile := out.Files[from]
+	if fromFile == nil {
+		return "weak"
+	}
+
+	// Count how many times 'to' appears in 'from's dependencies
+	count := 0
+	for _, dep := range fromFile.LocalDeps {
+		if dep == to || strings.Contains(to, dep) {
+			count++
+		}
+	}
+
+	// Check function calls and type usage for stronger dependencies
+	for _, funcInfo := range fromFile.Functions {
+		for _, call := range funcInfo.CallsTo {
+			if strings.Contains(call, to) {
+				count += 2 // Function calls are stronger dependencies
+			}
+		}
+		for _, typeUsed := range funcInfo.UsesTypes {
+			if out.TypeUsage[typeUsed] != nil {
+				for _, usage := range out.TypeUsage[typeUsed] {
+					if strings.Contains(usage, to) {
+						count += 1 // Type usage is moderate dependency
+					}
+				}
+			}
+		}
+	}
+
+	if count > 5 {
+		return "strong"
+	} else if count > 2 {
+		return "medium"
+	}
+	return "weak"
+}
+
+// getArrowStyle returns the mermaid arrow style based on dependency strength
+func getArrowStyle(strength string) string {
+	switch strength {
+	case "strong":
+		return "==>" // Thick arrow for strong dependencies
+	case "medium":
+		return "-->" // Normal arrow for medium dependencies
+	default:
+		return "-->" // Normal arrow (dotted arrows can be hard to see)
+	}
+}
+
+// getNodeStyle returns the mermaid node styling based on risk level
+func getNodeStyle(riskLevel string) string {
+	switch riskLevel {
+	case "high":
+		return ":::highRisk" // Red styling for high-risk files
+	case "medium":
+		return ":::mediumRisk" // Yellow styling for medium-risk files
+	default:
+		return ":::lowRisk" // Green styling for low-risk files
+	}
 }

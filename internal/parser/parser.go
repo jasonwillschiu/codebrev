@@ -24,7 +24,7 @@ func ProcessFiles(root string, out *outline.Outline) error {
 	}
 
 	// Walk directory tree
-	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -40,6 +40,13 @@ func ProcessFiles(root string, out *outline.Outline) error {
 
 		return processFile(path, info, out, fset)
 	})
+
+	if err != nil {
+		return err
+	}
+
+	// Second pass: resolve ~ alias dependencies now that all files are processed
+	return resolveAliasImports(out)
 }
 
 // processFile processes a single file based on its extension
@@ -76,6 +83,70 @@ func processFile(path string, info os.FileInfo, out *outline.Outline, fset *toke
 		strings.HasSuffix(path, ".ts") || strings.HasSuffix(path, ".tsx") {
 		// Use custom TypeScript/JavaScript parser
 		return parseTypeScriptFile(path, out, fileInfo)
+	}
+
+	return nil
+}
+
+// resolveAliasImports resolves ~ alias imports now that all files are processed
+func resolveAliasImports(out *outline.Outline) error {
+	for filePath, fileInfo := range out.Files {
+		// Create a new slice for resolved dependencies
+		var resolvedDeps []string
+
+		for _, dep := range fileInfo.LocalDeps {
+			resolvedDep := dep
+
+			// Only resolve ~ aliases
+			if strings.HasPrefix(dep, "~") {
+				// Convert ~/components/app/SummaryDisplay to src/components/app/SummaryDisplay
+				srcRelativePath := strings.Replace(dep, "~", "src", 1)
+
+				// Check if the import already has an extension
+				hasExtension := strings.HasSuffix(srcRelativePath, ".tsx") ||
+					strings.HasSuffix(srcRelativePath, ".ts") ||
+					strings.HasSuffix(srcRelativePath, ".astro") ||
+					strings.HasSuffix(srcRelativePath, ".js") ||
+					strings.HasSuffix(srcRelativePath, ".jsx")
+
+				if hasExtension {
+					// Import already has extension, try direct match
+					for availableFilePath := range out.Files {
+						if strings.HasSuffix(availableFilePath, srcRelativePath) {
+							resolvedDep = availableFilePath
+							break
+						}
+					}
+				} else {
+					// Try common extensions to find the actual file
+					possibleExtensions := []string{".tsx", ".ts", ".astro", ".js", ".jsx"}
+					for _, ext := range possibleExtensions {
+						targetPath := srcRelativePath + ext
+						// Check if any file in the outline ends with this path
+						for availableFilePath := range out.Files {
+							if strings.HasSuffix(availableFilePath, targetPath) {
+								resolvedDep = availableFilePath
+								break
+							}
+						}
+						if resolvedDep != dep {
+							break // Found a match
+						}
+					}
+				}
+
+			}
+
+			resolvedDeps = append(resolvedDeps, resolvedDep)
+
+			// Update the dependency in the outline if it was resolved
+			if resolvedDep != dep {
+				out.AddDependency(filePath, resolvedDep)
+			}
+		}
+
+		// Update the file's local dependencies with resolved paths
+		fileInfo.LocalDeps = resolvedDeps
 	}
 
 	return nil

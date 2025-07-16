@@ -1,3 +1,8 @@
+# 0.5.2 - Update: codebrev.md output
+- more concise dependencies
+- cleaner mermaid diagram with deps arrows following ~ alias mapping
+- app now runs as mcp server and cli tool (for easier testing)
+
 # 0.5.1 - Remove: windows-arm64.exe
 - too uncommon a binary type
 
