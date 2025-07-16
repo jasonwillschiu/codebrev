@@ -227,8 +227,7 @@ async function buildCrossPlatform(version = null) {
     { os: 'darwin', arch: 'arm64', name: 'code4context-darwin-arm64' },
     { os: 'linux', arch: 'amd64', name: 'code4context-linux-amd64' },
     { os: 'linux', arch: 'arm64', name: 'code4context-linux-arm64' },
-    { os: 'windows', arch: 'amd64', name: 'code4context-windows-amd64.exe' },
-    { os: 'windows', arch: 'arm64', name: 'code4context-windows-arm64.exe' }
+    { os: 'windows', arch: 'amd64', name: 'code4context-windows-amd64.exe' }
   ];
 
   const mainSpinner = createBunSpinner(`🚀 Starting cross-platform Go builds...`).start();
@@ -662,7 +661,7 @@ async function uploadToR2(version, skipBuild = false, releaseSummary = null, rel
 
     const platforms = [
       'darwin-amd64', 'darwin-arm64', 'linux-amd64',
-      'linux-arm64', 'windows-amd64.exe', 'windows-arm64.exe'
+      'linux-arm64', 'windows-amd64.exe'
     ];
 
     let canReuseAll = false;

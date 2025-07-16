@@ -1,3 +1,6 @@
+# 0.5.1 - Remove: windows-arm64.exe
+- too uncommon a binary type
+
 # 0.5.0 - Add: mermaid diagram generator
 - mermaid diagram1 is file level dependencies
 - mermaid diagram2 is a for-human, architectural overview

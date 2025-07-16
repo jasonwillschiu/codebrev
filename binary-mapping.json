@@ -6,7 +6,6 @@
     "darwin-arm64": "0.5.0",
     "linux-amd64": "0.5.0",
     "linux-arm64": "0.5.0",
-    "windows-amd64.exe": "0.5.0",
-    "windows-arm64.exe": "0.5.0"
+    "windows-amd64.exe": "0.5.0"
   }
 }
