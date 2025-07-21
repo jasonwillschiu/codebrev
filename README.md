@@ -1,28 +1,68 @@
-# Code4Context MCP Server
+# Code4Context - AI-Powered Code Analysis Tool
 
-An MCP (Model Context Protocol) server that provides code context generation and caching tools for AI agents. This server integrates the code4context functionality with a cache pattern - it checks for existing `codebrev.md` files first, and generates them if they don't exist.
+Code4Context is a powerful code analysis tool that generates structured summaries of codebases specifically designed for LLM consumption. It provides both CLI and MCP server modes to help AI assistants understand code structure, dependencies, and relationships.
+
+## Overview
+
+Code4Context creates comprehensive code summaries (`codebrev.md`) that help AI assistants understand:
+- Available functions and their signatures
+- Type definitions and relationships
+- File-by-file code organization
+- Import/export dependencies
+- Change impact analysis
+- Architecture visualization with Mermaid diagrams
 
 ## Features
 
-- **Cache Pattern**: Checks for existing `codebrev.md` files before generating new ones
-- **Two Main Tools**:
-  - `generate_code_context`: Force generate a new `codebrev.md` file
-  - `get_code_context`: Get cached `codebrev.md` or generate if missing
+- **Dual Mode**: CLI tool and MCP server in one binary
+- **Smart Caching**: Checks for existing `codebrev.md` files before regenerating
+- **Multi-Language Support**: Go, JavaScript, TypeScript, Astro, and more
+- **Dependency Analysis**: Tracks imports, exports, and file relationships
+- **Visual Diagrams**: Mermaid diagrams for file dependencies and architecture
+- **Change Impact Analysis**: Identifies affected functions and files when making changes
+- **AI-Optimized Output**: Structured for LLM consumption with clear signatures and types
 - **MCP Compatible**: Works with Claude, Cursor, Windsurf, OpenCode, and other MCP clients
 
-## Tools
+## Usage Modes
+
+### CLI Mode
+Use directly from the command line:
+
+```bash
+# Generate code context for current directory
+code4context .
+
+# Generate with custom output file
+code4context /path/to/project --output custom-name.md
+
+# Force regeneration
+code4context /path/to/project --force
+
+# Show help
+code4context --help
+```
+
+### MCP Server Mode
+Run as an MCP server for AI assistants:
+
+```bash
+# Start MCP server
+code4context --mcp
+```
+
+## MCP Tools
+
+When running as an MCP server, Code4Context provides these tools:
 
 ### generate_code_context
-
-Generates a `codebrev.md` file containing code structure outline for the specified directory.
+Generates a new `codebrev.md` file, overwriting any existing one.
 
 **Parameters:**
 - `directory_path` (required): Path to the directory to analyze
 - `output_file` (optional): Output file path (defaults to 'codebrev.md' in the target directory)
 
 ### get_code_context
-
-Gets cached `codebrev.md` file content, or generates it if it doesn't exist (cache pattern).
+Gets cached `codebrev.md` file content, or generates it if missing (cache pattern).
 
 **Parameters:**
 - `directory_path` (required): Path to the directory to get context for
@@ -40,7 +80,7 @@ Install the latest version using our interactive install script:
 curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com
 
 # Install specific version
-curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com --version 0.4.0
+curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com --version 0.5.2
 
 # Non-interactive installation
 NONINTERACTIVE=1 curl -fsSL https://code4context.jasonchiu.com/install.sh | sh -s -- --use-r2 --r2-url https://code4context.jasonchiu.com
@@ -63,7 +103,6 @@ The installer features:
    - macOS Intel: `code4context-darwin-amd64`
    - Linux ARM64: `code4context-linux-arm64`
    - Linux x64: `code4context-linux-amd64`
-   - Windows ARM64: `code4context-windows-arm64.exe`
    - Windows x64: `code4context-windows-amd64.exe`
 
 2. Make it executable and rename:
@@ -74,7 +113,7 @@ mv code4context-* code4context
 
 ### Build from Source
 
-1. Clone and build the server:
+1. Clone and build:
 ```bash
 git clone https://github.com/jasonwillschiu/code4context-com.git
 cd code4context-com
@@ -88,8 +127,9 @@ chmod +x code4context
 
 ## Configuration
 
-### Claude Desktop
+### MCP Client Configuration
 
+#### Claude Desktop
 Add to your Claude Desktop configuration:
 
 ```json
@@ -97,14 +137,13 @@ Add to your Claude Desktop configuration:
   "mcpServers": {
     "code4context": {
       "command": "/path/to/code4context",
-      "args": []
+      "args": ["--mcp"]
     }
   }
 }
 ```
 
-### Cursor
-
+#### Cursor
 Add to your `mcp.json` configuration:
 
 ```json
@@ -112,14 +151,13 @@ Add to your `mcp.json` configuration:
   "mcpServers": {
     "code4context": {
       "command": "/path/to/code4context",
-      "args": []
+      "args": ["--mcp"]
     }
   }
 }
 ```
 
-### OpenCode
-
+#### OpenCode
 Add to your `opencode.json` configuration:
 
 ```json
@@ -127,7 +165,7 @@ Add to your `opencode.json` configuration:
   "mcp": {
     "code4context": {
       "type": "local",
-      "command": ["/path/to/code4context"],
+      "command": ["/path/to/code4context", "--mcp"],
       "environment": {}
     }
   }

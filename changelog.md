@@ -1,3 +1,6 @@
+# 0.5.3 - Update: README and AGENTS.md
+- update docs
+
 # 0.5.2 - Update: codebrev.md output
 - more concise dependencies
 - cleaner mermaid diagram with deps arrows following ~ alias mapping

@@ -4,7 +4,8 @@ This document provides guidance for LLM agents working with Code4Context and int
 
 ## Developer Notes
 - Don't try to read binaries (such as code4context file), they're too many tokens and you can't read them anyway
-- When testing, run the binary to generate the codebrev.md file (once that feature is implemented)
+- When testing, run `go run main.go /path/to/project` to generate the codebrev.md file
+- The tool now supports both CLI mode and MCP server mode for integration with AI assistants
 
 ## Tool Purpose
 
@@ -38,6 +39,8 @@ Code4Context generates structured summaries of codebases specifically designed f
 - Interface definitions with method signatures
 - Methods now appear both in their file sections and as type methods
 - Method signatures include receiver type for clarity (e.g., `(TypeName) methodName()`)
+- Dependency tracking between packages
+- Function call graph analysis
 
 **JavaScript/TypeScript (.js, .jsx, .ts, .tsx)**
 - Regex-based parsing optimized for LLM context extraction
@@ -47,12 +50,16 @@ Code4Context generates structured summaries of codebases specifically designed f
 - Enum declarations and type annotations
 - Import/export statements tracked for dependency analysis
 - Focused on functions, types, and imports (variables/constants filtered out)
+- React component prop analysis
+- Export surface tracking
 
 **Astro Files (.astro)**
 - Custom parser for component extraction
 - TypeScript frontmatter parsing
 - Component import/export tracking
 - Template variable extraction
+- Client/server directive detection
+- Props interface extraction
 
 ## Best Practices for LLM Agents
 
@@ -126,13 +133,47 @@ The tool now captures:
 - **Module Visualization**: Package/namespace organization
 
 ### Expected Output Evolution
+The tool now generates comprehensive output including:
+
 ```markdown
-## Dependency Graph
+## File Dependency Graph (LLM Context)
 ```mermaid
 graph TD
     A[main.go] --> B[utils.go]
     A --> C[types.go]
     B --> C
+```
+
+## Architecture Overview (Human Context)
+```mermaid
+graph TB
+    subgraph Project Structure
+        A[main.go] --> B[internal/]
+        B --> C[parser/]
+        B --> D[writer/]
+    end
+```
+
+## AI Agent Guidelines
+### Safe to modify:
+- Add new functions to existing files
+- Modify function implementations (check dependents first)
+- Add new types that don't break existing interfaces
+
+### Requires careful analysis:
+- Changing function signatures (check all callers)
+- Modifying type definitions (check all usage)
+- Adding new dependencies (check for circular deps)
+
+### High-risk changes:
+- Modifying core types: FileInfo, Outline, error, outline
+- Changing package structure
+- Removing public APIs
+
+## Change Impact Analysis
+- Direct and indirect dependents for any file
+- Risk assessment for modifications
+- Test coverage impact
 ```
 
 ## Tips for Effective Usage
@@ -153,12 +194,15 @@ graph TD
 - **Simplified Parsing**: Removed tree-sitter complexity for more reliable extraction
 - **Language Detection**: Automatic language selection based on file extensions
 - **Warning System**: Non-fatal warnings for partial parsing failures
+- **Mermaid Generation**: Falls back gracefully if diagram generation fails
 
 ### Reliability Features
 - **Cross-Language Consistency**: Unified output format regardless of source language
 - **Duplicate Prevention**: Smart deduplication across files and within files
 - **Memory Efficiency**: Streaming processing for large codebases
 - **Error Recovery**: Continues processing even when individual constructs fail to parse
+- **Cache Management**: Intelligent caching with regeneration when needed
+- **Risk Assessment**: Automatic risk level calculation for changes
 
 ## Common Use Cases
 
@@ -170,6 +214,33 @@ graph TD
 - **Type system navigation**: Exploring interfaces, classes, and type relationships
 - **Component mapping**: Understanding Astro/React component hierarchies and dependencies
 - **Documentation generation**: Using extracted structure for automated API docs
+- **Risk assessment**: Understanding change impact and risk levels
+- **MCP integration**: Using as tools for AI assistants
+
+## MCP Server Features
+
+The tool now supports MCP (Model Context Protocol) server mode with these tools:
+
+### Available Tools
+- **generate_code_context**: Generate comprehensive code analysis for a directory
+- **get_code_context**: Retrieve cached analysis or regenerate if needed
+
+### Usage Patterns
+```json
+{
+  "tool": "generate_code_context",
+  "arguments": {
+    "directory_path": "/path/to/project",
+    "output_file": "codebrev.md"
+  }
+}
+```
+
+### Integration Benefits
+- Real-time code analysis within AI conversations
+- Cached results for performance
+- Structured output for LLM consumption
+- Visual diagrams (Mermaid) for architecture understanding
 
 ## Real-World Integration Examples
 
@@ -183,6 +254,8 @@ go run main.go /path/to/project
 # - Import dependencies between files
 # - Type definitions and relationships
 # - Component structure in frontend projects
+# - Risk levels for modifications
+# - Architecture diagrams
 ```
 
 ### Example 2: Refactoring Support
@@ -195,6 +268,8 @@ go run main.go
 # - Import statements that may break
 # - Type dependencies that could be affected
 # - Related methods within classes/interfaces
+# - Direct and indirect dependents
+# - Risk assessment for changes
 ```
 
 ### Example 3: API Documentation
@@ -207,6 +282,17 @@ go run main.go /path/to/library
 # - Public type definitions and interfaces
 # - Module dependencies and relationships
 # - Component props and usage patterns
+# - Public API surface analysis
+```
+
+### Example 4: MCP Server Integration
+```bash
+# Run as MCP server for AI assistants
+./code4context --mcp
+
+# Or use the tools directly:
+# - code4context.generate_code_context
+# - code4context.get_code_context
 ```
 
 This tool bridges the gap between raw code and LLM understanding, providing the structured context needed for effective AI-assisted development with robust error handling and comprehensive language support.
