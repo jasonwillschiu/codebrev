@@ -1,3 +1,7 @@
+# 0.12.1 - Add: Treasure Map Skill
+- Added Treasure Map Skill to use in conjunction to this repo
+- Should later make it part of the app to just show the text or something
+
 # 0.12.0 - Update: Robust gitignore pattern matching
 - Rewrote gitignore logic to be fully compliant with Git's specification
 - Added support for negations (`!`), anchored patterns (`/`), and `**` globbing

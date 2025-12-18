@@ -179,13 +179,18 @@ Files that depend on each file (useful for understanding change impact):
 - (Gitignore) loadGitignoreFile(gitignorePath string)
 - (Gitignore) loadGitignoreFromPath(path string)
 - (Gitignore) loadGitignoreHierarchy(gitRoot string, scanRoot string)
-- (Gitignore) matchPattern(path string, pattern string) -> bool
+- (Gitignore) matchPattern(relPath string, rawPattern string) -> bool, bool
 - New(root string) -> *Gitignore
+- compileDirGlobToRegex(glob string) -> *regexp.Regexp
+- compileGlobToRegex(glob string) -> *regexp.Regexp
 - findGitRoot(startPath string) -> string
+- globToRegexFragment(glob string) -> string
+- normalizeGitignorePattern(raw string) -> normalizedPattern, bool
 
 ### Types
 - Gitignore (methods: ShouldIgnore, loadGitignoreHierarchy, loadGitignoreFile, loadGitignoreFromPath, matchPattern) (fields: Patterns, Root, GitRoot, LoadedDirs)
 - Pattern (fields: Pattern, BaseDir)
+- normalizedPattern (fields: pattern, negated, dirOnly, noSlash, anchored, raw)
 
 ---
 
@@ -361,4 +366,3 @@ Files that depend on each file (useful for understanding change impact):
 - ChangelogEntry (fields: Version, Summary, Description)
 
 ---
-
