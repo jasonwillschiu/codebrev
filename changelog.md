@@ -1,3 +1,11 @@
+# 0.9.0 - BREAKING: Remove MCP server and Astro parsing
+- Removed MCP (Model Context Protocol) server mode
+- Now CLI-only tool (no more `--mcp` flag)
+- Removed Astro file parsing support
+- TypeScript/JavaScript parsing extracted to dedicated typescript.go file
+- Simplified architecture: focused on core CLI functionality
+- Breaking change: MCP tools (generate_code_context, get_code_context) no longer available
+
 # 0.8.0 - Add: go.work support + contracts + unified map
 - Go workspaces supported (`go.work`): local imports resolve across modules
 - Added contract extraction:

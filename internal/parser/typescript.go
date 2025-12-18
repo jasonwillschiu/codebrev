@@ -9,73 +9,18 @@ import (
 	"github.com/jasonwillschiu/codebrev/internal/outline"
 )
 
-// parseAstroFile parses an Astro file by extracting frontmatter and template information
-func parseAstroFile(path string, out *outline.Outline, fileInfo *outline.FileInfo) error {
+// parseTypeScriptFile parses standalone TypeScript/JavaScript files
+func parseTypeScriptFile(path string, out *outline.Outline, fileInfo *outline.FileInfo) error {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
 
 	contentStr := string(content)
-
-	// Split Astro file into frontmatter and template
-	frontmatter, template := splitAstroFile(contentStr)
-
-	// Parse frontmatter as TypeScript
-	if frontmatter != "" {
-		if err := parseTypeScriptContent(frontmatter, out, fileInfo); err != nil {
-			// Don't fail completely if frontmatter parsing fails
-			// Just log and continue
-		}
-	}
-
-	// Parse template for component usage and structure
-	parseAstroTemplate(template, out, fileInfo)
-
-	return nil
+	return parseTypeScriptContentRegex(contentStr, out, fileInfo)
 }
 
-// splitAstroFile splits an Astro file into frontmatter and template sections
-func splitAstroFile(content string) (frontmatter, template string) {
-	lines := strings.Split(content, "\n")
-
-	if len(lines) == 0 {
-		return "", content
-	}
-
-	// Check if file starts with frontmatter delimiter
-	if strings.TrimSpace(lines[0]) != "---" {
-		return "", content
-	}
-
-	// Find the closing frontmatter delimiter
-	frontmatterEnd := -1
-	for i := 1; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "---" {
-			frontmatterEnd = i
-			break
-		}
-	}
-
-	if frontmatterEnd == -1 {
-		// No closing delimiter found, treat entire file as template
-		return "", content
-	}
-
-	// Extract frontmatter (excluding delimiters)
-	frontmatterLines := lines[1:frontmatterEnd]
-	frontmatter = strings.Join(frontmatterLines, "\n")
-
-	// Extract template (everything after closing delimiter)
-	if frontmatterEnd+1 < len(lines) {
-		templateLines := lines[frontmatterEnd+1:]
-		template = strings.Join(templateLines, "\n")
-	}
-
-	return frontmatter, template
-}
-
-// parseTypeScriptContent parses TypeScript frontmatter content with enhanced type extraction
+// parseTypeScriptContent parses TypeScript content with enhanced type extraction
 func parseTypeScriptContent(content string, out *outline.Outline, fileInfo *outline.FileInfo) error {
 	// Use enhanced regex-based parsing for pure Go solution
 	return parseTypeScriptContentRegex(content, out, fileInfo)
@@ -341,54 +286,6 @@ func parseParameters(paramsStr string) []string {
 	return params
 }
 
-// parseAstroTemplate parses the template section for component usage
-func parseAstroTemplate(template string, out *outline.Outline, fileInfo *outline.FileInfo) {
-	// Extract component usage from template
-	componentRegex := regexp.MustCompile(`<(\w+)(?:\s|>|/>)`)
-	matches := componentRegex.FindAllStringSubmatch(template, -1)
-
-	var components []string
-	for _, match := range matches {
-		if len(match) > 1 {
-			componentName := match[1]
-			// Filter out standard HTML elements
-			if isCustomComponent(componentName) {
-				components = append(components, componentName)
-			}
-		}
-	}
-
-	// Add components as a special type
-	if len(components) > 0 {
-		componentStr := "COMPONENTS: " + strings.Join(removeDuplicateStrings(components), ", ")
-		fileInfo.Types = append(fileInfo.Types, componentStr)
-	}
-
-	// Template variable extraction removed - not useful for LLM context
-}
-
-// isCustomComponent checks if a tag name represents a custom component
-func isCustomComponent(tagName string) bool {
-	// Standard HTML elements (not exhaustive, but covers common ones)
-	htmlElements := map[string]bool{
-		"div": true, "span": true, "p": true, "a": true, "img": true,
-		"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
-		"ul": true, "ol": true, "li": true, "table": true, "tr": true, "td": true, "th": true,
-		"form": true, "input": true, "button": true, "select": true, "option": true,
-		"header": true, "footer": true, "nav": true, "main": true, "section": true, "article": true,
-		"aside": true, "figure": true, "figcaption": true, "time": true, "address": true,
-		"blockquote": true, "cite": true, "code": true, "pre": true, "kbd": true, "samp": true,
-		"var": true, "sub": true, "sup": true, "small": true, "strong": true, "em": true,
-		"mark": true, "del": true, "ins": true, "q": true, "abbr": true, "dfn": true,
-		"ruby": true, "rt": true, "rp": true, "bdi": true, "bdo": true, "wbr": true,
-		"details": true, "summary": true, "menuitem": true, "menu": true,
-	}
-
-	// Custom components typically start with uppercase or contain hyphens
-	return !htmlElements[strings.ToLower(tagName)] &&
-		(strings.ToUpper(tagName[:1]) == tagName[:1] || strings.Contains(tagName, "-"))
-}
-
 // removeDuplicateStrings removes duplicate strings from a slice
 func removeDuplicateStrings(slice []string) []string {
 	seen := make(map[string]bool)
@@ -402,15 +299,4 @@ func removeDuplicateStrings(slice []string) []string {
 	}
 
 	return result
-}
-
-// parseTypeScriptFile parses standalone TypeScript/JavaScript files
-func parseTypeScriptFile(path string, out *outline.Outline, fileInfo *outline.FileInfo) error {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-
-	contentStr := string(content)
-	return parseTypeScriptContentRegex(contentStr, out, fileInfo)
 }

@@ -20,7 +20,6 @@ task test               # Run tests with 60s timeout
 
 # Code generation
 task gen -- DIR=.       # Generate codebrev.md for a directory
-task mcp                # Run in MCP server mode
 
 # Release management
 task get-version        # Print latest version from changelog.md
@@ -39,16 +38,13 @@ go build -o codebrev .
 go run main.go /path/to/project
 go run main.go --output custom.md /path/to/project
 
-# Run MCP server mode
-go run main.go --mcp
-
 # Tests
 go test ./...
 ```
 
 ## Architecture Overview
 
-codebrev is a dual-mode tool (CLI + MCP server) that analyzes codebases and generates structured summaries (`codebrev.md`) optimized for LLM consumption.
+codebrev is a CLI tool that analyzes codebases and generates structured summaries (`codebrev.md`) optimized for LLM consumption.
 
 ### Core Pipeline
 
@@ -56,8 +52,7 @@ codebrev is a dual-mode tool (CLI + MCP server) that analyzes codebases and gene
    - Entry point: `ProcessFiles(root string, out *outline.Outline)` in `parser.go`
    - Language-specific parsers:
      - `go.go`: Go AST parsing via `go/ast` and `go/token`
-     - `astro.go`: Astro component parsing (frontmatter + template)
-     - Shared logic for TypeScript/JavaScript
+     - `typescript.go`: TypeScript/JavaScript parsing
    - Handles gitignore filtering via `internal/gitignore`
    - Two-pass dependency resolution:
      - First pass: Parse files and collect raw dependencies
@@ -118,25 +113,19 @@ codebrev is a dual-mode tool (CLI + MCP server) that analyzes codebases and gene
 - `Calls`: count of cross-package function calls
 - `TypeUses`: count of cross-package type usages
 
-### Dual-Mode Operation
+### CLI Operation
 
-**CLI Mode** (when directory argument provided):
+**CLI Mode**:
 - `runCLIMode()` in `main.go`
 - Calls `generateCodeContext(directoryPath, outputFile)`
 - Writes `codebrev.md` to specified location
-
-**MCP Server Mode** (when no directory or `--mcp` flag):
-- `runMCPMode()` in `main.go`
-- Uses `github.com/mark3labs/mcp-go` for stdio-based MCP protocol
-- Two tools:
-  - `generate_code_context`: Always regenerates
-  - `get_code_context`: Returns cached file or generates if missing
+- Defaults to current directory if no path provided
 
 ## Important Patterns
 
 ### Dependency Resolution
 - **Alias imports**: `~` is resolved to `src` in frontend code
-- **Extension inference**: Tries `.tsx`, `.ts`, `.astro`, `.js`, `.jsx` in order
+- **Extension inference**: Tries `.tsx`, `.ts`, `.js`, `.jsx` in order
 - **Index files**: `./components` resolves to `./components/index.tsx` if direct match fails
 - Package-level deps are resolved to a "representative file" (lexicographically first) to avoid graph explosion
 
@@ -189,6 +178,5 @@ Distribution uses Cloudflare R2 with content-based binary deduplication (see REA
 
 - **File path formats**: All file paths in `Outline` are repo-relative and slash-separated (even on Windows)
 - **Deduplication timing**: Call `out.RemoveDuplicates()` after parsing but before writing
-- **MCP logging**: Logs go to stderr to avoid corrupting stdio communication
 - **Single-file mode**: `ProcessFiles()` handles both directories and single files
 - **Module path**: Extracted from `go.mod` and used to distinguish local vs external Go imports

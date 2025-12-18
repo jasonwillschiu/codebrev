@@ -80,7 +80,7 @@ func processFile(path string, info os.FileInfo, out *outline.Outline, fset *toke
 	}
 
 	// Check for supported file extensions
-	supportedExts := []string{".go", ".js", ".jsx", ".ts", ".tsx", ".astro"}
+	supportedExts := []string{".go", ".js", ".jsx", ".ts", ".tsx"}
 	supported := false
 	for _, ext := range supportedExts {
 		if strings.HasSuffix(path, ext) {
@@ -106,9 +106,6 @@ func processFile(path string, info os.FileInfo, out *outline.Outline, fset *toke
 	if strings.HasSuffix(path, ".go") {
 		assignGoModuleForFile(fileInfo, absRoot, path, modules)
 		return parseGoFile(path, out, fileInfo, fset)
-	} else if strings.HasSuffix(path, ".astro") {
-		// Use custom Astro parser for better extraction
-		return parseAstroFile(path, out, fileInfo)
 	} else if strings.HasSuffix(path, ".js") || strings.HasSuffix(path, ".jsx") ||
 		strings.HasSuffix(path, ".ts") || strings.HasSuffix(path, ".tsx") {
 		// Use custom TypeScript/JavaScript parser
@@ -239,7 +236,7 @@ func resolveLocalImport(fromFile, dep string, out *outline.Outline) string {
 	}
 
 	// Try common extensions.
-	possibleExtensions := []string{".tsx", ".ts", ".astro", ".js", ".jsx"}
+	possibleExtensions := []string{".tsx", ".ts", ".js", ".jsx"}
 	for _, ext := range possibleExtensions {
 		target := dep + ext
 		if _, ok := out.Files[target]; ok {
@@ -271,7 +268,6 @@ func resolveLocalImport(fromFile, dep string, out *outline.Outline) string {
 func hasKnownFrontendExtension(path string) bool {
 	return strings.HasSuffix(path, ".tsx") ||
 		strings.HasSuffix(path, ".ts") ||
-		strings.HasSuffix(path, ".astro") ||
 		strings.HasSuffix(path, ".js") ||
 		strings.HasSuffix(path, ".jsx")
 }

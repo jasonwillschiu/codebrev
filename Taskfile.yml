@@ -23,18 +23,19 @@ tasks:
     cmds:
       - go vet ./...
 
+  modernize:
+    desc: uses gopls/modernize on the repo
+    cmds:
+      - go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -test ./...
+
   lint:
-    desc: Run golangci-lint (includes fmt and vet)
+    desc: Run golangci-lint against the module
     deps:
       - fmt
       - vet
+      - modernize
     cmds:
-      - |
-        if ! command -v golangci-lint >/dev/null 2>&1; then
-          echo "golangci-lint not found. Install: https://golangci-lint.run/welcome/install/"
-          exit 1
-        fi
-        golangci-lint run ./...
+      - golangci-lint run ./...
 
   test:
     desc: Run Go tests with a timeout
@@ -57,11 +58,6 @@ tasks:
     desc: Generate codebrev.md for DIR (set DIR=/path/to/project)
     cmds:
       - go run main.go {{.DIR}}
-
-  mcp:
-    desc: Run in MCP server mode
-    cmds:
-      - go run main.go --mcp
 
   clean:
     desc: Remove build artifacts

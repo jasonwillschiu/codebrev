@@ -5,7 +5,7 @@ This document provides guidance for LLM agents working with codebrev and interpr
 ## Developer Notes
 - Don't try to read binaries (such as codebrev file), they're too many tokens and you can't read them anyway
 - When testing, run `go run main.go /path/to/project` to generate the codebrev.md file
-- The tool now supports both CLI mode and MCP server mode for integration with AI assistants
+- Use `task lint` to lint
 
 ## Tool Purpose
 
@@ -58,14 +58,6 @@ codebrev generates structured summaries of codebases specifically designed for L
 - React component prop analysis
 - Export surface tracking
 
-**Astro Files (.astro)**
-- Custom parser for component extraction
-- TypeScript frontmatter parsing
-- Component import/export tracking
-- Template variable extraction
-- Client/server directive detection
-- Props interface extraction
-
 ## Best Practices for LLM Agents
 
 ### 1. Context Understanding
@@ -95,7 +87,6 @@ The tool automatically filters out:
 The tool now captures:
 - **Import statements**: All module dependencies and their sources
 - **Export declarations**: What each file makes available to others
-- **Component relationships**: Astro component imports and usage
 - **Type dependencies**: Interface and type alias relationships
 - **Method visibility**: Methods appear both in file sections and type definitions
 
@@ -219,35 +210,8 @@ graph TB
 - **API discovery**: Finding available functions, their signatures, and usage patterns
 - **Architecture analysis**: Understanding code organization, patterns, and module structure
 - **Type system navigation**: Exploring interfaces, classes, and type relationships
-- **Component mapping**: Understanding Astro/React component hierarchies and dependencies
 - **Documentation generation**: Using extracted structure for automated API docs
 - **Risk assessment**: Understanding change impact and risk levels
-- **MCP integration**: Using as tools for AI assistants
-
-## MCP Server Features
-
-The tool now supports MCP (Model Context Protocol) server mode with these tools:
-
-### Available Tools
-- **generate_code_context**: Generate comprehensive code analysis for a directory
-- **get_code_context**: Retrieve cached analysis or regenerate if needed
-
-### Usage Patterns
-```json
-{
-  "tool": "generate_code_context",
-  "arguments": {
-    "directory_path": "/path/to/project",
-    "output_file": "codebrev.md"
-  }
-}
-```
-
-### Integration Benefits
-- Real-time code analysis within AI conversations
-- Cached results for performance
-- Structured output for LLM consumption
-- Visual diagrams (Mermaid) for architecture understanding
 
 ## Real-World Integration Examples
 
@@ -288,18 +252,7 @@ go run main.go /path/to/library
 # - Exported functions and their signatures
 # - Public type definitions and interfaces
 # - Module dependencies and relationships
-# - Component props and usage patterns
 # - Public API surface analysis
-```
-
-### Example 4: MCP Server Integration
-```bash
-# Run as MCP server for AI assistants
-./codebrev --mcp
-
-# Or use the tools directly:
-# - codebrev.generate_code_context
-# - codebrev.get_code_context
 ```
 
 This tool bridges the gap between raw code and LLM understanding, providing the structured context needed for effective AI-assisted development with robust error handling and comprehensive language support.

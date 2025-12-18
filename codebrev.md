@@ -45,7 +45,7 @@ graph TB
 
     subgraph pkg_internal_parser ["internal/parser"]
         P4
-        F5["parser/astro.go"]:::lowRisk
+        F5["parser/go.go"]:::lowRisk
         P4 --> F5
         F6["parser/parser.go"]:::lowRisk
         P4 --> F6
@@ -167,13 +167,13 @@ Files that depend on each file (useful for understanding change impact):
 
 ### internal/outline/dedup.go is used by:
 - internal/mermaid/generator.go
-- internal/parser/astro.go
 - internal/parser/go.go
 - internal/parser/parser.go
+- internal/parser/typescript.go
 - internal/writer/writer.go
 - main.go
 
-### internal/parser/astro.go is used by:
+### internal/parser/go.go is used by:
 - main.go
 
 ### internal/writer/writer.go is used by:
@@ -252,21 +252,6 @@ Files that depend on each file (useful for understanding change impact):
 
 ---
 
-## internal/parser/astro.go
-
-### Functions
-- isCustomComponent(tagName string) -> bool
-- parseAstroFile(path string, out *outline.Outline, fileInfo *outline.FileInfo) -> error
-- parseAstroTemplate(template string, out *outline.Outline, fileInfo *outline.FileInfo)
-- parseParameters(paramsStr string) -> []string
-- parseTypeScriptContent(content string, out *outline.Outline, fileInfo *outline.FileInfo) -> error
-- parseTypeScriptContentRegex(content string, out *outline.Outline, fileInfo *outline.FileInfo) -> error
-- parseTypeScriptFile(path string, out *outline.Outline, fileInfo *outline.FileInfo) -> error
-- removeDuplicateStrings(slice []string) -> []string
-- splitAstroFile(content string) -> string
-
----
-
 ## internal/parser/go.go
 
 ### Functions
@@ -314,6 +299,17 @@ Files that depend on each file (useful for understanding change impact):
 
 ---
 
+## internal/parser/typescript.go
+
+### Functions
+- parseParameters(paramsStr string) -> []string
+- parseTypeScriptContent(content string, out *outline.Outline, fileInfo *outline.FileInfo) -> error
+- parseTypeScriptContentRegex(content string, out *outline.Outline, fileInfo *outline.FileInfo) -> error
+- parseTypeScriptFile(path string, out *outline.Outline, fileInfo *outline.FileInfo) -> error
+- removeDuplicateStrings(slice []string) -> []string
+
+---
+
 ## internal/writer/writer.go
 
 ### Functions
@@ -330,12 +326,9 @@ Files that depend on each file (useful for understanding change impact):
 ## main.go
 
 ### Functions
-- addGenerateCodeContextTool(s *server.MCPServer)
-- addGetCodeContextTool(s *server.MCPServer)
 - generateCodeContext(directoryPath string, outputFile string) -> error
 - main()
 - runCLIMode(args []string, outputFile string)
-- runMCPMode()
 - showHelpMessage()
 
 ---
