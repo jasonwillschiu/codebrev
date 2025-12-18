@@ -9,7 +9,7 @@ This project uses [Task](https://taskfile.dev/) for build automation. Common com
 
 ```bash
 # Build the binary
-task build              # Build to bin/code4context (debug)
+task build              # Build to bin/codebrev (debug)
 task build-prod         # Build with optimizations (-ldflags="-s -w")
 
 # Development
@@ -33,7 +33,7 @@ task clean              # Remove bin/ artifacts
 ### Using Go directly
 ```bash
 # Build
-go build -o code4context .
+go build -o codebrev .
 
 # Run CLI mode
 go run main.go /path/to/project
@@ -48,7 +48,7 @@ go test ./...
 
 ## Architecture Overview
 
-Code4Context is a dual-mode tool (CLI + MCP server) that analyzes codebases and generates structured summaries (`codebrev.md`) optimized for LLM consumption.
+codebrev is a dual-mode tool (CLI + MCP server) that analyzes codebases and generates structured summaries (`codebrev.md`) optimized for LLM consumption.
 
 ### Core Pipeline
 

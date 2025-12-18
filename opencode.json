@@ -8,10 +8,10 @@
       ],
       "environment": {}
     },
-    "code4context": {
+    "codebrev": {
       "type": "local",
       "command": [
-        "./mcp-servers/code4context"
+        "./mcp-servers/codebrev"
       ],
       "environment": {}
     }

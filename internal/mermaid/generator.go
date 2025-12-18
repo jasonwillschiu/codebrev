@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"code4context/internal/outline"
+	"github.com/jasonwillschiu/codebrev/internal/outline"
 )
 
 // GenerateFileDependencyGraph creates a mermaid diagram showing file-to-file dependencies

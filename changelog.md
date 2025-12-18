@@ -1,3 +1,11 @@
+# 0.7.0 - BREAKING: Rename to codebrev, go-installable only
+- Repository renamed from code4context to codebrev
+- Module path: github.com/jasonwillschiu/codebrev (go-gettable)
+- Binary renamed: code4context → codebrev
+- Removed: R2 distribution, install.sh, prebuilt binaries
+- Installation: `go install github.com/jasonwillschiu/codebrev@latest`
+- Simplified release process: git tags only
+
 # 0.6.0 - Add: Go package-level dependency tracking
 - Package-level dependency graphs with coupling signals
 - EdgeStat tracking: imports, cross-package calls, type uses

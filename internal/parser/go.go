@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"code4context/internal/outline"
+	"github.com/jasonwillschiu/codebrev/internal/outline"
 )
 
 // parseGoFile parses a Go file using AST parsing

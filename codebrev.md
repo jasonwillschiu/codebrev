@@ -1,6 +1,6 @@
 # Code Structure Outline
 
-This file provides an overview of available functions, types, and variables per file for LLM context.
+This file provides an overview of available functions and types per file for LLM context.
 
 ## File Dependency Graph (LLM Context)
 
@@ -8,28 +8,27 @@ This diagram shows direct file-to-file dependencies to help understand which fil
 
 ```mermaid
 graph TD
-    F0["cicd.js"]:::lowRisk
-    F1["gitignore/gitignore.go"]:::lowRisk
-    F2["mermaid/generator.go"]:::lowRisk
-    F3["outline/dedup.go"]:::highRisk
-    F4["outline/types.go"]:::lowRisk
-    F5["parser/astro.go"]:::lowRisk
-    F6["parser/go.go"]:::lowRisk
-    F7["parser/parser.go"]:::lowRisk
-    F8["writer/writer.go"]:::lowRisk
+    F0["gitignore/gitignore.go"]:::lowRisk
+    F1["mermaid/generator.go"]:::lowRisk
+    F2["outline/dedup.go"]:::highRisk
+    F3["outline/types.go"]:::lowRisk
+    F4["parser/astro.go"]:::lowRisk
+    F5["parser/go.go"]:::lowRisk
+    F6["parser/parser.go"]:::lowRisk
+    F7["writer/writer.go"]:::lowRisk
+    F8["main.go"]:::lowRisk
     F9["main.go"]:::lowRisk
-    F10["main.go"]:::lowRisk
 
-    F2 ==> F3
-    F5 ==> F3
-    F6 ==> F3
-    F7 --> F1
-    F7 ==> F3
-    F8 ==> F2
-    F8 ==> F3
-    F9 --> F3
-    F9 --> F5
-    F9 --> F8
+    F1 ==> F2
+    F4 ==> F2
+    F5 ==> F2
+    F6 --> F0
+    F6 ==> F2
+    F7 ==> F1
+    F7 ==> F2
+    F8 --> F2
+    F8 --> F4
+    F8 --> F7
 
     classDef highRisk fill:#ffcccc,stroke:#ff0000,stroke-width:2px
     classDef mediumRisk fill:#fff3cd,stroke:#ffc107,stroke-width:2px
@@ -94,37 +93,36 @@ graph TB
     end
 
     subgraph root ["root"]
-        N8["cicd.js"]
-        N9["main.go"]
+        N8["main.go"]
     end
 
     subgraph tools_release-tool ["tools/release-tool"]
-        N10["main.go"]
+        N9["main.go"]
     end
 
     subgraph external ["External Dependencies"]
-        EXT0["os/exec"]
+        EXT0["go/ast"]
         EXT1["bufio"]
         EXT2["sort"]
-        EXT3["log"]
-        EXT4["go/token"]
-        EXT5["path"]
-        EXT6["util"]
-        EXT7["os"]
-        EXT8["strings"]
-        EXT9["flag"]
+        EXT3["mark3labs/mcp-go/mcp"]
+        EXT4["os/exec"]
+        EXT5["go/parser"]
+        EXT6["os"]
+        EXT7["strings"]
+        EXT8["flag"]
+        EXT9["runtime"]
     end
 
-    N5 --> N2
     N6 --> N0
     N6 --> N2
-    N1 --> N2
+    N8 --> N2
+    N8 --> N4
+    N8 --> N7
     N4 --> N2
+    N5 --> N2
     N7 --> N1
     N7 --> N2
-    N9 --> N2
-    N9 --> N4
-    N9 --> N7
+    N1 --> N2
 ```
 
 ## AI Agent Guidelines
@@ -211,42 +209,6 @@ Files that depend on each file (useful for understanding change impact):
 
 ### internal/writer/writer.go is used by:
 - main.go
-
-## cicd.js
-
-### Functions
-- bold(text)
-- buildCrossPlatform(version = null)
-- buildLocal()
-- calculateContentHash()
-- checkBinaryExists(awsEnv, bucket, endpoint, version, platform)
-- checkGitStatus()
-- checkGitTagExists(version)
-- createBunSpinner(initialText = "", opts = {})
-- createGitHubRelease(version, summary, description)
-- cyan(text)
-- findLatestVersionWithBinary(awsEnv, bucket, endpoint, platform, _ignored = 0)
-- generateLdflags(version, buildDate, gitCommit)
-- getLatestVersionMetadata(awsEnv, bucket, endpoint)
-- gitAdd()
-- gitCommit(summary, description)
-- gitPush()
-- gitTag(version, summary)
-- green(text)
-- hasGoFileChanges()
-- mapColor(name)
-- parseLatestChangelogEntry()
-- red(text)
-- render()
-- semverToInts(v)
-- showInstallationGuide()
-- uploadToR2(version, skipBuild = false, releaseSummary = null, releaseDescription = null)
-- yellow(text)
-
-### Types
-- IMPORTS: bun, path, fs/promises, util
-
----
 
 ## internal/gitignore/gitignore.go
 

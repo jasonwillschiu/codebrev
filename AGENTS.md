@@ -1,15 +1,15 @@
 # AGENTS.md - LLM Integration Guide
 
-This document provides guidance for LLM agents working with Code4Context and interpreting its output.
+This document provides guidance for LLM agents working with codebrev and interpreting its output.
 
 ## Developer Notes
-- Don't try to read binaries (such as code4context file), they're too many tokens and you can't read them anyway
+- Don't try to read binaries (such as codebrev file), they're too many tokens and you can't read them anyway
 - When testing, run `go run main.go /path/to/project` to generate the codebrev.md file
 - The tool now supports both CLI mode and MCP server mode for integration with AI assistants
 
 ## Tool Purpose
 
-Code4Context generates structured summaries of codebases specifically designed for LLM consumption. The output (`codebrev.md`) provides a hierarchical view of code structure that helps AI assistants understand:
+codebrev generates structured summaries of codebases specifically designed for LLM consumption. The output (`codebrev.md`) provides a hierarchical view of code structure that helps AI assistants understand:
 
 - Available functions and their signatures
 - Type definitions and relationships
@@ -291,11 +291,11 @@ go run main.go /path/to/library
 ### Example 4: MCP Server Integration
 ```bash
 # Run as MCP server for AI assistants
-./code4context --mcp
+./codebrev --mcp
 
 # Or use the tools directly:
-# - code4context.generate_code_context
-# - code4context.get_code_context
+# - codebrev.generate_code_context
+# - codebrev.get_code_context
 ```
 
 This tool bridges the gap between raw code and LLM understanding, providing the structured context needed for effective AI-assisted development with robust error handling and comprehensive language support.

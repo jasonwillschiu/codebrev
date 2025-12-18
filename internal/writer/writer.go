@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"code4context/internal/mermaid"
-	"code4context/internal/outline"
+	"github.com/jasonwillschiu/codebrev/internal/mermaid"
+	"github.com/jasonwillschiu/codebrev/internal/outline"
 )
 
 // WriteOutlineToFile writes the outline to codebrev.md
@@ -24,7 +24,7 @@ func WriteOutlineToFile(out *outline.Outline) error {
 
 	fmt.Fprintln(writer, "# Code Structure Outline")
 	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "This file provides an overview of available functions, types, and variables per file for LLM context.")
+	fmt.Fprintln(writer, "This file provides an overview of available functions and types per file for LLM context.")
 	fmt.Fprintln(writer, "")
 
 	// Generate and include mermaid diagrams
@@ -110,16 +110,6 @@ func WriteOutlineToFile(out *outline.Outline) error {
 					}
 				}
 				fmt.Fprintln(writer, "")
-			}
-			fmt.Fprintln(writer, "")
-		}
-
-		// Variables available in this file
-		if len(fileInfo.Vars) > 0 {
-			sort.Strings(fileInfo.Vars)
-			fmt.Fprintln(writer, "### Variables")
-			for _, v := range fileInfo.Vars {
-				fmt.Fprintf(writer, "- %s\n", v)
 			}
 			fmt.Fprintln(writer, "")
 		}
@@ -145,7 +135,7 @@ func WriteOutlineToFileWithPath(out *outline.Outline, filePath string) error {
 
 	fmt.Fprintln(writer, "# Code Structure Outline")
 	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "This file provides an overview of available functions, types, and variables per file for LLM context.")
+	fmt.Fprintln(writer, "This file provides an overview of available functions and types per file for LLM context.")
 	fmt.Fprintln(writer, "")
 
 	// Generate and include mermaid diagrams
@@ -231,16 +221,6 @@ func WriteOutlineToFileWithPath(out *outline.Outline, filePath string) error {
 					}
 				}
 				fmt.Fprintln(writer, "")
-			}
-			fmt.Fprintln(writer, "")
-		}
-
-		// Variables available in this file
-		if len(fileInfo.Vars) > 0 {
-			sort.Strings(fileInfo.Vars)
-			fmt.Fprintln(writer, "### Variables")
-			for _, v := range fileInfo.Vars {
-				fmt.Fprintf(writer, "- %s\n", v)
 			}
 			fmt.Fprintln(writer, "")
 		}

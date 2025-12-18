@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"code4context/internal/outline"
-	"code4context/internal/parser"
-	"code4context/internal/writer"
+	"github.com/jasonwillschiu/codebrev/internal/outline"
+	"github.com/jasonwillschiu/codebrev/internal/parser"
+	"github.com/jasonwillschiu/codebrev/internal/writer"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -36,7 +36,7 @@ func main() {
 
 	// Handle version flag
 	if *showVersion {
-		fmt.Printf("code4context %s\n", Version)
+		fmt.Printf("codebrev %s\n", Version)
 		fmt.Printf("Build Date: %s\n", BuildDate)
 		fmt.Printf("Git Commit: %s\n", GitCommit)
 		fmt.Printf("Go Version: %s\n", runtime.Version())
@@ -67,11 +67,11 @@ func main() {
 }
 
 func showHelpMessage() {
-	fmt.Println("code4context - Code Context Generator")
+	fmt.Println("codebrev - Code Context Generator")
 	fmt.Println("")
 	fmt.Println("USAGE:")
-	fmt.Println("  code4context [OPTIONS] [DIRECTORY]")
-	fmt.Println("  code4context [OPTIONS] --mcp")
+	fmt.Println("  codebrev [OPTIONS] [DIRECTORY]")
+	fmt.Println("  codebrev [OPTIONS] --mcp")
 	fmt.Println("")
 	fmt.Println("MODES:")
 	fmt.Println("  CLI Mode (default when directory specified):")
@@ -87,20 +87,20 @@ func showHelpMessage() {
 	fmt.Println("  --mcp             Force MCP server mode")
 	fmt.Println("")
 	fmt.Println("EXAMPLES:")
-	fmt.Println("  code4context .                    # Generate codebrev.md for current directory")
-	fmt.Println("  code4context /path/to/project     # Generate codebrev.md for specified directory")
-	fmt.Println("  code4context --output custom.md . # Generate with custom output filename")
-	fmt.Println("  code4context --mcp                # Run as MCP server")
+	fmt.Println("  codebrev .                    # Generate codebrev.md for current directory")
+	fmt.Println("  codebrev /path/to/project     # Generate codebrev.md for specified directory")
+	fmt.Println("  codebrev --output custom.md . # Generate with custom output filename")
+	fmt.Println("  codebrev --mcp                # Run as MCP server")
 	fmt.Println("")
 	fmt.Println("MCP SERVER TOOLS:")
 	fmt.Println("  - generate_code_context: Generate codebrev.md for a directory")
 	fmt.Println("  - get_code_context: Get cached codebrev.md or generate if missing")
 	fmt.Println("")
 	fmt.Println("MCP CONFIGURATION:")
-	fmt.Println("  Claude: claude mcp add code4context -- code4context")
+	fmt.Println("  Claude: claude mcp add codebrev -- codebrev")
 	fmt.Println("  Cursor (mcp.json):")
-	fmt.Println(`    "code4context": {`)
-	fmt.Println(`      "command": "code4context",`)
+	fmt.Println(`    "codebrev": {`)
+	fmt.Println(`      "command": "codebrev",`)
 	fmt.Println(`      "args": ["--mcp"]`)
 	fmt.Println(`    }`)
 }
@@ -147,14 +147,14 @@ func runCLIMode(args []string, outputFile string) {
 func runMCPMode() {
 	// Set up logging to stderr so it doesn't interfere with stdio communication
 	log.SetOutput(os.Stderr)
-	log.SetPrefix("[code4context-mcp] ")
+	log.SetPrefix("[codebrev-mcp] ")
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	log.Printf("Starting code4context MCP Server %s", Version)
+	log.Printf("Starting codebrev MCP Server %s", Version)
 
 	// Create a new MCP server
 	s := server.NewMCPServer(
-		"code4context",
+		"codebrev",
 		Version,
 		server.WithToolCapabilities(true),
 		server.WithRecovery(),

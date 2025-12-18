@@ -1,6 +1,6 @@
 test-files
 #test-files/frontend4
-code4context
+codebrev
 llm-context
 #mcp-servers
 .env
@@ -8,4 +8,4 @@ llm-context
 # Build artifacts
 bin/
 *.exe
-code4context-*
+codebrev-*

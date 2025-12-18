@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"code4context/internal/gitignore"
-	"code4context/internal/outline"
+	"github.com/jasonwillschiu/codebrev/internal/gitignore"
+	"github.com/jasonwillschiu/codebrev/internal/outline"
 )
 
 // ProcessFiles processes all files in the given root directory

@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"code4context/internal/outline"
+	"github.com/jasonwillschiu/codebrev/internal/outline"
 )
 
 // parseAstroFile parses an Astro file by extracting frontmatter and template information

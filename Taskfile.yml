@@ -3,7 +3,7 @@ version: "3"
 vars:
   GO_TIMEOUT: 60s
   BIN_DIR: bin
-  BINARY: "{{.BIN_DIR}}/code4context"
+  BINARY: "{{.BIN_DIR}}/codebrev"
   RELEASE_TOOL_BINARY: "{{.BIN_DIR}}/release-tool"
   DIR: "."
 
@@ -42,13 +42,13 @@ tasks:
       - go test ./... -timeout {{.GO_TIMEOUT}}
 
   build:
-    desc: Build local binary (bin/code4context)
+    desc: Build local binary (bin/codebrev)
     cmds:
       - mkdir -p {{.BIN_DIR}}
       - go build -o {{.BINARY}} .
 
   build-prod:
-    desc: Build optimized binary (bin/code4context)
+    desc: Build optimized binary (bin/codebrev)
     cmds:
       - mkdir -p {{.BIN_DIR}}
       - go build -ldflags="-s -w" -o {{.BINARY}} .
