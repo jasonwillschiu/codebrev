@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"log"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/jasonwillschiu/codebrev/internal/outline"
@@ -36,15 +37,8 @@ func parseGoFile(path string, out *outline.Outline, fileInfo *outline.FileInfo, 
 			alias = parts[len(parts)-1]
 		}
 
-		// Check if it's a local import (module-aware).
-		if out.ModulePath != "" && (importPath == out.ModulePath || strings.HasPrefix(importPath, out.ModulePath+"/")) {
-			localPkgDir := strings.TrimPrefix(importPath, out.ModulePath)
-			localPkgDir = strings.TrimPrefix(localPkgDir, "/")
-			localPkgDir = filepath.ToSlash(localPkgDir)
-			if localPkgDir == "" {
-				localPkgDir = "."
-			}
-
+		// Check if it's a local import (go.mod/go.work aware).
+		if localPkgDir, ok := resolveLocalGoImport(out, importPath); ok {
 			fileInfo.LocalPkgDeps = append(fileInfo.LocalPkgDeps, localPkgDir)
 			aliasToLocalPkgDir[alias] = localPkgDir
 			out.AddPackageDependency(fileInfo.PackageDir, localPkgDir)
@@ -78,6 +72,14 @@ func parseGoFile(path string, out *outline.Outline, fileInfo *outline.FileInfo, 
 						for _, f := range st.Fields.List {
 							for _, name := range f.Names { // ignore anonymous fields
 								ti.Fields = append(ti.Fields, name.Name)
+
+								// Extract "contract" keys from struct tags (best-effort).
+								if f.Tag != nil {
+									tagValue := strings.Trim(f.Tag.Value, "`")
+									if tagValue != "" {
+										addContractKeysFromTag(ti, name.Name, reflect.StructTag(tagValue))
+									}
+								}
 							}
 							// Track embedded types
 							if len(f.Names) == 0 { // anonymous field = embedded type
@@ -147,10 +149,120 @@ func parseGoFile(path string, out *outline.Outline, fileInfo *outline.FileInfo, 
 
 				recordGoCouplingSignals(d, fileInfo, out, aliasToLocalPkgDir)
 			}
+		case *ast.CallExpr:
+			// Best-effort route extraction (chi/http style).
+			if route := extractRouteFromCallExpr(d); route != "" {
+				appendUniqueString(&fileInfo.Routes, route)
+			}
 		}
 		return true
 	})
 	return nil
+}
+
+func resolveLocalGoImport(out *outline.Outline, importPath string) (string, bool) {
+	if len(out.ModulePaths) == 0 {
+		return "", false
+	}
+
+	// Prefer longest module path match (handles nested modules).
+	bestDir := ""
+	bestModPath := ""
+	for dirRel, modPath := range out.ModulePaths {
+		if modPath == "" {
+			continue
+		}
+		if importPath == modPath || strings.HasPrefix(importPath, modPath+"/") {
+			if len(modPath) > len(bestModPath) {
+				bestModPath = modPath
+				bestDir = dirRel
+			}
+		}
+	}
+	if bestModPath == "" {
+		return "", false
+	}
+
+	suffix := strings.TrimPrefix(importPath, bestModPath)
+	suffix = strings.TrimPrefix(suffix, "/")
+	suffix = filepath.ToSlash(suffix)
+
+	// Repo-relative package dir.
+	if bestDir == "" || bestDir == "." {
+		if suffix == "" {
+			return ".", true
+		}
+		return suffix, true
+	}
+	if suffix == "" {
+		return bestDir, true
+	}
+	return filepath.ToSlash(filepath.Join(bestDir, suffix)), true
+}
+
+func appendUniqueString(dst *[]string, value string) {
+	for _, existing := range *dst {
+		if existing == value {
+			return
+		}
+	}
+	*dst = append(*dst, value)
+}
+
+func addContractKeysFromTag(ti *outline.TypeInfo, fieldName string, tag reflect.StructTag) {
+	// Keys we care about for "contract" surfaces.
+	tagKeys := []string{"json", "form", "query", "header", "path", "param", "url"}
+	for _, key := range tagKeys {
+		raw := tag.Get(key)
+		if raw == "" {
+			continue
+		}
+		name := strings.Split(raw, ",")[0]
+		name = strings.TrimSpace(name)
+		if name == "-" {
+			continue
+		}
+		if name == "" {
+			name = fieldName
+		}
+		appendUniqueString(&ti.ContractKeys, key+":"+name)
+	}
+}
+
+func extractRouteFromCallExpr(call *ast.CallExpr) string {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return ""
+	}
+	method := sel.Sel.Name
+
+	// Many routers use these verb-ish method names.
+	verb := ""
+	switch method {
+	case "Get", "Post", "Put", "Patch", "Delete", "Head", "Options":
+		verb = strings.ToUpper(method)
+	case "Route", "Mount":
+		verb = strings.ToUpper(method)
+	case "Handle", "HandleFunc":
+		verb = strings.ToUpper(method)
+	default:
+		return ""
+	}
+
+	// Filter out common false positives like http.Header.Get("X") which only has 1 arg.
+	// Router-style methods typically take at least (pattern, handler).
+	if len(call.Args) < 2 {
+		return ""
+	}
+	lit, ok := call.Args[0].(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return ""
+	}
+	path := strings.Trim(lit.Value, "\"")
+	if path == "" {
+		return ""
+	}
+	return verb + " " + path
 }
 
 func recordGoCouplingSignals(d *ast.FuncDecl, fileInfo *outline.FileInfo, out *outline.Outline, aliasToLocalPkgDir map[string]string) {
@@ -299,6 +411,11 @@ func extractFunctionInfo(d *ast.FuncDecl) outline.FunctionInfo {
 				} else if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 					funcInfo.CallsTo = append(funcInfo.CallsTo, sel.Sel.Name)
 				}
+			case *ast.CompositeLit:
+				// Capture types used inside function bodies: Type{...}, &Type{...}, pkg.Type{...}, etc.
+				funcInfo.UsesTypes = append(funcInfo.UsesTypes, extractTypesFromExpr(call.Type)...)
+			case *ast.TypeAssertExpr:
+				funcInfo.UsesTypes = append(funcInfo.UsesTypes, extractTypesFromExpr(call.Type)...)
 			}
 			return true
 		})

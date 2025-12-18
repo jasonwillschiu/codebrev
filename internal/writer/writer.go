@@ -27,30 +27,17 @@ func WriteOutlineToFile(out *outline.Outline) error {
 	fmt.Fprintln(writer, "This file provides an overview of available functions and types per file for LLM context.")
 	fmt.Fprintln(writer, "")
 
-	// Generate and include mermaid diagrams
-	fmt.Fprintln(writer, "## File Dependency Graph (LLM Context)")
+	// Generate and include mermaid dependency map (single combined diagram)
+	fmt.Fprintln(writer, "## Dependency Map (LLM + Human Context)")
 	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "This diagram shows direct file-to-file dependencies to help understand which files are related and may need coordinated changes.")
+	fmt.Fprintln(writer, "This diagram combines package-level dependencies and key files into a single readable map.")
+	fmt.Fprintln(writer, "Note: External imports are intentionally omitted here; check go.mod (or module go.mod files in go.work workspaces) for dependencies.")
 	fmt.Fprintln(writer, "")
-	fmt.Fprint(writer, mermaid.GenerateFileDependencyGraph(out))
+	fmt.Fprint(writer, mermaid.GenerateUnifiedDependencyMap(out))
 	fmt.Fprintln(writer, "")
 
-	// Go package graph (when applicable)
-	if pkgGraph := mermaid.GenerateGoPackageDependencyGraph(out); pkgGraph != "" {
-		fmt.Fprintln(writer, "## Go Package Dependency Graph (LLM Context)")
-		fmt.Fprintln(writer, "")
-		fmt.Fprintln(writer, "This diagram shows Go package-to-package dependencies (directory-based), with edges weighted by imports, cross-package calls, and cross-package type usage.")
-		fmt.Fprintln(writer, "")
-		fmt.Fprint(writer, pkgGraph)
-		fmt.Fprintln(writer, "")
-	}
-
-	fmt.Fprintln(writer, "## Architecture Overview (Human Context)")
-	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "This diagram provides a high-level view of the codebase structure with directory groupings and external dependencies.")
-	fmt.Fprintln(writer, "")
-	fmt.Fprint(writer, mermaid.GenerateArchitectureOverview(out))
-	fmt.Fprintln(writer, "")
+	// Write contract surfaces (routes + struct tags) for safer changes.
+	writeContracts(writer, out)
 
 	// Write AI Agent Guidance
 	writeAIAgentGuidance(writer, out)
@@ -108,8 +95,21 @@ func WriteOutlineToFile(out *outline.Outline) error {
 					if len(ti.Fields) > 0 {
 						fmt.Fprintf(writer, " (fields: %s)", strings.Join(ti.Fields, ", "))
 					}
+					if len(ti.ContractKeys) > 0 {
+						fmt.Fprintf(writer, " (contracts: %s)", strings.Join(ti.ContractKeys, ", "))
+					}
 				}
 				fmt.Fprintln(writer, "")
+			}
+			fmt.Fprintln(writer, "")
+		}
+
+		// Routes extracted from this file (best-effort).
+		if len(fileInfo.Routes) > 0 {
+			sort.Strings(fileInfo.Routes)
+			fmt.Fprintln(writer, "### Routes")
+			for _, r := range fileInfo.Routes {
+				fmt.Fprintf(writer, "- %s\n", r)
 			}
 			fmt.Fprintln(writer, "")
 		}
@@ -138,30 +138,16 @@ func WriteOutlineToFileWithPath(out *outline.Outline, filePath string) error {
 	fmt.Fprintln(writer, "This file provides an overview of available functions and types per file for LLM context.")
 	fmt.Fprintln(writer, "")
 
-	// Generate and include mermaid diagrams
-	fmt.Fprintln(writer, "## File Dependency Graph (LLM Context)")
+	// Generate and include mermaid dependency map (single combined diagram)
+	fmt.Fprintln(writer, "## Dependency Map (LLM + Human Context)")
 	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "This diagram shows direct file-to-file dependencies to help understand which files are related and may need coordinated changes.")
+	fmt.Fprintln(writer, "This diagram combines package-level dependencies and key files into a single readable map.")
+	fmt.Fprintln(writer, "Note: External imports are intentionally omitted here; check go.mod (or module go.mod files in go.work workspaces) for dependencies.")
 	fmt.Fprintln(writer, "")
-	fmt.Fprint(writer, mermaid.GenerateFileDependencyGraph(out))
+	fmt.Fprint(writer, mermaid.GenerateUnifiedDependencyMap(out))
 	fmt.Fprintln(writer, "")
 
-	// Go package graph (when applicable)
-	if pkgGraph := mermaid.GenerateGoPackageDependencyGraph(out); pkgGraph != "" {
-		fmt.Fprintln(writer, "## Go Package Dependency Graph (LLM Context)")
-		fmt.Fprintln(writer, "")
-		fmt.Fprintln(writer, "This diagram shows Go package-to-package dependencies (directory-based), with edges weighted by imports, cross-package calls, and cross-package type usage.")
-		fmt.Fprintln(writer, "")
-		fmt.Fprint(writer, pkgGraph)
-		fmt.Fprintln(writer, "")
-	}
-
-	fmt.Fprintln(writer, "## Architecture Overview (Human Context)")
-	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "This diagram provides a high-level view of the codebase structure with directory groupings and external dependencies.")
-	fmt.Fprintln(writer, "")
-	fmt.Fprint(writer, mermaid.GenerateArchitectureOverview(out))
-	fmt.Fprintln(writer, "")
+	writeContracts(writer, out)
 
 	// Write AI Agent Guidance
 	writeAIAgentGuidance(writer, out)
@@ -219,8 +205,21 @@ func WriteOutlineToFileWithPath(out *outline.Outline, filePath string) error {
 					if len(ti.Fields) > 0 {
 						fmt.Fprintf(writer, " (fields: %s)", strings.Join(ti.Fields, ", "))
 					}
+					if len(ti.ContractKeys) > 0 {
+						fmt.Fprintf(writer, " (contracts: %s)", strings.Join(ti.ContractKeys, ", "))
+					}
 				}
 				fmt.Fprintln(writer, "")
+			}
+			fmt.Fprintln(writer, "")
+		}
+
+		// Routes extracted from this file (best-effort).
+		if len(fileInfo.Routes) > 0 {
+			sort.Strings(fileInfo.Routes)
+			fmt.Fprintln(writer, "### Routes")
+			for _, r := range fileInfo.Routes {
+				fmt.Fprintf(writer, "- %s\n", r)
 			}
 			fmt.Fprintln(writer, "")
 		}
@@ -231,6 +230,67 @@ func WriteOutlineToFileWithPath(out *outline.Outline, filePath string) error {
 
 	fmt.Printf("Code outline written to %s\n", filePath)
 	return nil
+}
+
+func writeContracts(writer *bufio.Writer, out *outline.Outline) {
+	fmt.Fprintln(writer, "## Contracts (LLM Context)")
+	fmt.Fprintln(writer, "")
+	fmt.Fprintln(writer, "These are extracted contract surfaces (best-effort) that commonly cause breakage when changed:")
+	fmt.Fprintln(writer, "- Struct tags (json/query/form/header/etc) are treated as API/DTO contracts")
+	fmt.Fprintln(writer, "- Router-style call sites with string paths are treated as route contracts")
+	fmt.Fprintln(writer, "")
+
+	// Tagged structs / DTO-like contracts.
+	var contractTypes []string
+	for name, ti := range out.Types {
+		if name == "" || ti == nil || len(ti.ContractKeys) == 0 {
+			continue
+		}
+		contractTypes = append(contractTypes, name)
+	}
+	sort.Strings(contractTypes)
+
+	if len(contractTypes) > 0 {
+		fmt.Fprintln(writer, "### Tagged Structs")
+		for _, name := range contractTypes {
+			ti := out.Types[name]
+			keys := append([]string(nil), ti.ContractKeys...)
+			sort.Strings(keys)
+			fmt.Fprintf(writer, "- %s (keys: %s)", name, strings.Join(keys, ", "))
+
+			usedBy := out.TypeUsage[name]
+			if len(usedBy) > 0 {
+				sort.Strings(usedBy)
+				if len(usedBy) > 10 {
+					fmt.Fprintf(writer, " (used by: %s, ... +%d more)", strings.Join(usedBy[:10], ", "), len(usedBy)-10)
+				} else {
+					fmt.Fprintf(writer, " (used by: %s)", strings.Join(usedBy, ", "))
+				}
+			}
+			fmt.Fprintln(writer, "")
+		}
+		fmt.Fprintln(writer, "")
+	}
+
+	// Route strings (best-effort).
+	var routeFiles []string
+	for path, fi := range out.Files {
+		if fi != nil && len(fi.Routes) > 0 {
+			routeFiles = append(routeFiles, path)
+		}
+	}
+	sort.Strings(routeFiles)
+
+	if len(routeFiles) > 0 {
+		fmt.Fprintln(writer, "### Routes")
+		for _, path := range routeFiles {
+			fi := out.Files[path]
+			routes := append([]string(nil), fi.Routes...)
+			sort.Strings(routes)
+			fmt.Fprintf(writer, "- %s: %s\n", path, strings.Join(routes, ", "))
+		}
+		fmt.Fprintln(writer, "")
+	}
 }
 
 // writeAIAgentGuidance writes AI agent specific guidance

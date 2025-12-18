@@ -1,3 +1,11 @@
+# 0.8.0 - Add: go.work support + contracts + unified map
+- Go workspaces supported (`go.work`): local imports resolve across modules
+- Added contract extraction:
+  - Struct tags (`json`, `query`, `form`, `header`, etc)
+  - Router-style route strings (`Get("/path", ...)`, etc)
+- Mermaid output consolidated into a single Dependency Map (package anchors + key files)
+- External imports removed from the diagram (see go.mod for dependencies)
+
 # 0.7.0 - BREAKING: Rename to codebrev, go-installable only
 - Repository renamed from code4context to codebrev
 - Module path: github.com/jasonwillschiu/codebrev (go-gettable)

@@ -8,7 +8,7 @@ codebrev creates comprehensive code summaries (`codebrev.md`) that help AI assis
 - Available functions and their signatures
 - Type definitions and relationships
 - File-by-file code organization
-- Import/export dependencies
+- Local dependency structure (imports/relations)
 - Change impact analysis
 - Architecture visualization with Mermaid diagrams
 
@@ -17,9 +17,9 @@ codebrev creates comprehensive code summaries (`codebrev.md`) that help AI assis
 - **Dual Mode**: CLI tool and MCP server in one binary
 - **Smart Caching**: Checks for existing `codebrev.md` files before regenerating
 - **Multi-Language Support**: Go, JavaScript, TypeScript, Astro, and more
-- **Dependency Analysis**: Tracks imports, exports, and file relationships
+- **Dependency Analysis**: Tracks local file/package relationships and change impact
 - **Go Package Analysis**: Package-level dependency graphs with coupling signals (imports, calls, type uses)
-- **Visual Diagrams**: Mermaid diagrams for file dependencies, package dependencies, and architecture
+- **Visual Diagrams**: A single Mermaid dependency map (package anchors + key files); external deps are intentionally omitted (see `go.mod`)
 - **Change Impact Analysis**: Identifies affected functions, files, and packages when making changes
 - **AI-Optimized Output**: Structured for LLM consumption with clear signatures and types
 - **MCP Compatible**: Works with Claude, Cursor, Windsurf, OpenCode, and other MCP clients
@@ -80,7 +80,7 @@ go install github.com/jasonwillschiu/codebrev@latest
 Or install a specific version:
 
 ```bash
-go install github.com/jasonwillschiu/codebrev@v0.7.0
+go install github.com/jasonwillschiu/codebrev@v0.8.0
 ```
 
 Make sure `$GOPATH/bin` (typically `~/go/bin`) is in your PATH.

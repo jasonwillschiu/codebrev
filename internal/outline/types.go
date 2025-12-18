@@ -17,8 +17,13 @@ type EdgeStat struct {
 
 // Outline represents the complete code structure analysis
 type Outline struct {
-	RootDir    string // absolute path to the scan root
-	ModulePath string // Go module path from go.mod (e.g. "github.com/acme/repo")
+	RootDir string // absolute path to the scan root
+	// ModulePath is kept for backward compatibility (single-module repos).
+	// For go.work and multi-module workspaces, use ModulePaths.
+	ModulePath string
+	// ModulePaths maps repo-relative module directories to their Go module path,
+	// e.g. "." -> "github.com/acme/repo", "server" -> "dmca-bot1-server".
+	ModulePaths map[string]string
 
 	Files         map[string]*FileInfo
 	Types         map[string]*TypeInfo
@@ -55,6 +60,8 @@ type FunctionInfo struct {
 type FileInfo struct {
 	Path       string // repo-relative
 	AbsPath    string // absolute (used for parsing/reading)
+	ModuleDir  string // repo-relative module directory (e.g. ".", "server")
+	ModulePath string // Go module path for this file's module; empty for non-Go files
 	PackageDir string // repo-relative directory (e.g. "internal/parser" or ".")
 	// PackageName is the Go package name (e.g. "parser"); empty for non-Go files.
 	PackageName string
@@ -62,6 +69,7 @@ type FileInfo struct {
 	Functions     []FunctionInfo
 	Types         []string
 	Vars          []string
+	Routes        []string  // extracted route strings (best-effort)
 	Imports       []string  // external imports (packages/modules)
 	LocalDeps     []string  // local file dependencies (repo-relative file paths, resolved)
 	LocalPkgDeps  []string  // local Go package dependencies (repo-relative dirs)
@@ -79,6 +87,7 @@ type TypeInfo struct {
 	IsPublic      bool
 	Implements    []string // Interfaces this type implements
 	EmbeddedTypes []string // Types this type embeds
+	ContractKeys  []string // e.g. "json:id", "query:q", "header:X-Token"
 	UsedBy        []string // Files/functions that use this type
 	LineNumber    int      // Line number in source file
 }
@@ -101,6 +110,7 @@ type TestInfo struct {
 // New creates a new Outline instance
 func New() *Outline {
 	return &Outline{
+		ModulePaths:   make(map[string]string),
 		Files:         make(map[string]*FileInfo),
 		Types:         make(map[string]*TypeInfo),
 		Dependencies:  make(map[string][]string),

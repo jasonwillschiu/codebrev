@@ -43,6 +43,9 @@ codebrev generates structured summaries of codebases specifically designed for L
 - Function call graph analysis
 - Cross-package type usage tracking
 - Package-level change impact analysis
+- Best-effort contract extraction:
+  - Struct tags (`json`, `query`, `form`, `header`, etc)
+  - Router-style route strings (`Get("/path", ...)`, etc)
 
 **JavaScript/TypeScript (.js, .jsx, .ts, .tsx)**
 - Regex-based parsing optimized for LLM context extraction
@@ -102,6 +105,7 @@ The tool now captures:
 1. Generate `codebrev.md` first using `go run main.go`
 2. Identify relevant sections by searching function/type names
 3. Use import/export information to understand dependencies
+   - Note: Mermaid diagram omits external imports; check `go.mod` (or module `go.mod` files in `go.work` workspaces) for dependencies.
 4. Request specific file contents for detailed implementation
 5. Cross-reference with outline for context and relationships
 

@@ -2,45 +2,13 @@
 
 This file provides an overview of available functions and types per file for LLM context.
 
-## File Dependency Graph (LLM Context)
+## Dependency Map (LLM + Human Context)
 
-This diagram shows direct file-to-file dependencies to help understand which files are related and may need coordinated changes.
-
-```mermaid
-graph TD
-    F0["gitignore/gitignore.go"]:::lowRisk
-    F1["mermaid/generator.go"]:::lowRisk
-    F2["outline/dedup.go"]:::highRisk
-    F3["outline/types.go"]:::lowRisk
-    F4["parser/astro.go"]:::lowRisk
-    F5["parser/go.go"]:::lowRisk
-    F6["parser/parser.go"]:::lowRisk
-    F7["writer/writer.go"]:::lowRisk
-    F8["main.go"]:::lowRisk
-    F9["main.go"]:::lowRisk
-
-    F1 ==> F2
-    F4 ==> F2
-    F5 ==> F2
-    F6 --> F0
-    F6 ==> F2
-    F7 ==> F1
-    F7 ==> F2
-    F8 --> F2
-    F8 --> F4
-    F8 --> F7
-
-    classDef highRisk fill:#ffcccc,stroke:#ff0000,stroke-width:2px
-    classDef mediumRisk fill:#fff3cd,stroke:#ffc107,stroke-width:2px
-    classDef lowRisk fill:#d4edda,stroke:#28a745,stroke-width:2px
-```
-
-## Go Package Dependency Graph (LLM Context)
-
-This diagram shows Go package-to-package dependencies (directory-based), with edges weighted by imports, cross-package calls, and cross-package type usage.
+This diagram combines package-level dependencies and key files into a single readable map.
+Note: External imports are intentionally omitted here; check go.mod (or module go.mod files in go.work workspaces) for dependencies.
 
 ```mermaid
-graph TD
+graph TB
     P0["root"]:::lowRisk
     P1["internal/gitignore"]:::lowRisk
     P2["internal/mermaid"]:::lowRisk
@@ -48,6 +16,52 @@ graph TD
     P4["internal/parser"]:::lowRisk
     P5["internal/writer"]:::lowRisk
     P6["tools/release-tool"]:::lowRisk
+
+    subgraph pkg_root ["root"]
+        P0
+        F0["main.go"]:::lowRisk
+        P0 --> F0
+    end
+
+    subgraph pkg_internal_gitignore ["internal/gitignore"]
+        P1
+        F1["gitignore/gitignore.go"]:::lowRisk
+        P1 --> F1
+    end
+
+    subgraph pkg_internal_mermaid ["internal/mermaid"]
+        P2
+        F2["mermaid/generator.go"]:::lowRisk
+        P2 --> F2
+    end
+
+    subgraph pkg_internal_outline ["internal/outline"]
+        P3
+        F3["outline/dedup.go"]:::highRisk
+        P3 --> F3
+        F4["outline/types.go"]:::lowRisk
+        P3 --> F4
+    end
+
+    subgraph pkg_internal_parser ["internal/parser"]
+        P4
+        F5["parser/astro.go"]:::lowRisk
+        P4 --> F5
+        F6["parser/parser.go"]:::lowRisk
+        P4 --> F6
+    end
+
+    subgraph pkg_internal_writer ["internal/writer"]
+        P5
+        F7["writer/writer.go"]:::lowRisk
+        P5 --> F7
+    end
+
+    subgraph pkg_tools_release_tool ["tools/release-tool"]
+        P6
+        F8["release-tool/main.go"]:::lowRisk
+        P6 --> F8
+    end
 
     P0 --> P3
     P0 --> P4
@@ -58,72 +72,26 @@ graph TD
     P5 ==> P2
     P5 ==> P3
 
+    F2 ==> F3
+    F5 ==> F3
+    F6 --> F1
+    F6 ==> F3
+    F7 ==> F2
+    F7 ==> F3
+    F0 --> F3
+    F0 --> F5
+    F0 --> F7
+
     classDef highRisk fill:#ffcccc,stroke:#ff0000,stroke-width:2px
     classDef mediumRisk fill:#fff3cd,stroke:#ffc107,stroke-width:2px
     classDef lowRisk fill:#d4edda,stroke:#28a745,stroke-width:2px
 ```
 
-## Architecture Overview (Human Context)
+## Contracts (LLM Context)
 
-This diagram provides a high-level view of the codebase structure with directory groupings and external dependencies.
-
-```mermaid
-graph TB
-    subgraph internal_gitignore ["internal/gitignore"]
-        N0["gitignore/gitignore.go"]
-    end
-
-    subgraph internal_mermaid ["internal/mermaid"]
-        N1["mermaid/generator.go"]
-    end
-
-    subgraph internal_outline ["internal/outline"]
-        N2["outline/dedup.go"]
-        N3["outline/types.go"]
-    end
-
-    subgraph internal_parser ["internal/parser"]
-        N4["parser/astro.go"]
-        N5["parser/go.go"]
-        N6["parser/parser.go"]
-    end
-
-    subgraph internal_writer ["internal/writer"]
-        N7["writer/writer.go"]
-    end
-
-    subgraph root ["root"]
-        N8["main.go"]
-    end
-
-    subgraph tools_release-tool ["tools/release-tool"]
-        N9["main.go"]
-    end
-
-    subgraph external ["External Dependencies"]
-        EXT0["go/ast"]
-        EXT1["bufio"]
-        EXT2["sort"]
-        EXT3["mark3labs/mcp-go/mcp"]
-        EXT4["os/exec"]
-        EXT5["go/parser"]
-        EXT6["os"]
-        EXT7["strings"]
-        EXT8["flag"]
-        EXT9["runtime"]
-    end
-
-    N6 --> N0
-    N6 --> N2
-    N8 --> N2
-    N8 --> N4
-    N8 --> N7
-    N4 --> N2
-    N5 --> N2
-    N7 --> N1
-    N7 --> N2
-    N1 --> N2
-```
+These are extracted contract surfaces (best-effort) that commonly cause breakage when changed:
+- Struct tags (json/query/form/header/etc) are treated as API/DTO contracts
+- Router-style call sites with string paths are treated as route contracts
 
 ## AI Agent Guidelines
 
@@ -138,7 +106,7 @@ graph TB
 - Adding new dependencies (check for circular deps)
 
 ### High-risk changes:
-- Modifying core types: FileInfo, Outline, ast, error, outline
+- Modifying core types: FileInfo, Outline, ast, error, goModule, outline
 - Changing package structure
 - Removing public APIs
 
@@ -164,6 +132,7 @@ These are the public functions and types that can be safely used by other files:
 - GenerateArchitectureOverview
 - GenerateFileDependencyGraph
 - GenerateGoPackageDependencyGraph
+- GenerateUnifiedDependencyMap
 
 ### internal/outline/types.go
 - New
@@ -233,14 +202,16 @@ Files that depend on each file (useful for understanding change impact):
 - GenerateArchitectureOverview(out *outline.Outline) -> string
 - GenerateFileDependencyGraph(out *outline.Outline) -> string
 - GenerateGoPackageDependencyGraph(out *outline.Outline) -> string
+- GenerateUnifiedDependencyMap(out *outline.Outline) -> string
 - collectGoPackages(out *outline.Outline) -> []string
+- disambiguatedFileLabel(filePath string, baseCount map[string]int) -> string
 - getArrowStyle(strength string) -> string
 - getCleanDepName(dep string) -> string
 - getDependencyStrength(out *outline.Outline, from string, to string) -> string
 - getNodeStyle(riskLevel string) -> string
 - getPackageDependencyStrength(out *outline.Outline, fromPkg string, toPkg string) -> string
 - getShortFileName(filePath string) -> string
-- isLocalImport(imp string, modulePath string) -> bool
+- isLocalImport(imp string, modulePaths map[string]string) -> bool
 
 ---
 
@@ -271,13 +242,13 @@ Files that depend on each file (useful for understanding change impact):
 
 ### Types
 - EdgeStat (fields: Imports, Calls, TypeUses)
-- FileInfo (fields: Path, AbsPath, PackageDir, PackageName, Functions, Types, Vars, Imports, LocalDeps, LocalPkgDeps, ExportedFuncs, ExportedTypes, TestCoverage, RiskLevel)
+- FileInfo (fields: Path, AbsPath, ModuleDir, ModulePath, PackageDir, PackageName, Functions, Types, Vars, Routes, Imports, LocalDeps, LocalPkgDeps, ExportedFuncs, ExportedTypes, TestCoverage, RiskLevel)
 - FunctionInfo (fields: Name, Params, ReturnType, IsPublic, CallsTo, CalledBy, UsesTypes, LineNumber)
 - ImpactInfo (fields: DirectDependents, IndirectDependents, RiskLevel, TestsAffected)
-- Outline (methods: RemoveDuplicates, EnsureType, AddFile, AddDependency, AddPackageDependency, AddPackageReverseDependency, AddPackageEdgeStat, CalculatePackageChangeImpact, findIndirectPackageDependents, AddReverseDependency, AddFunctionCall, AddTypeUsage, CalculateChangeImpact, findIndirectDependents) (fields: RootDir, ModulePath, Files, Types, Vars, Funcs, Dependencies, FunctionCalls, TypeUsage, ReverseDeps, PublicAPIs, ChangeImpact, Packages, PackageDeps, PackageReverseDeps, PackageImpact, PackageEdgeStats)
+- Outline (methods: RemoveDuplicates, EnsureType, AddFile, AddDependency, AddPackageDependency, AddPackageReverseDependency, AddPackageEdgeStat, CalculatePackageChangeImpact, findIndirectPackageDependents, AddReverseDependency, AddFunctionCall, AddTypeUsage, CalculateChangeImpact, findIndirectDependents) (fields: RootDir, ModulePath, ModulePaths, Files, Types, Vars, Funcs, Dependencies, FunctionCalls, TypeUsage, ReverseDeps, PublicAPIs, ChangeImpact, Packages, PackageDeps, PackageReverseDeps, PackageImpact, PackageEdgeStats)
 - PackageInfo (fields: PackagePath, Files, Representative)
 - TestInfo (fields: TestFiles, Coverage, TestScenarios)
-- TypeInfo (fields: Name, Fields, Methods, IsPublic, Implements, EmbeddedTypes, UsedBy, LineNumber)
+- TypeInfo (fields: Name, Fields, Methods, IsPublic, Implements, EmbeddedTypes, ContractKeys, UsedBy, LineNumber)
 
 ---
 
@@ -299,13 +270,33 @@ Files that depend on each file (useful for understanding change impact):
 ## internal/parser/go.go
 
 ### Functions
+- addContractKeysFromTag(ti *outline.TypeInfo, fieldName string, tag reflect.StructTag)
+- appendUniqueString(dst *[]string, value string)
 - extractFunctionInfo(d *ast.FuncDecl) -> outline.FunctionInfo
+- extractRouteFromCallExpr(call *ast.CallExpr) -> string
 - extractTypesFromExpr(expr ast.Expr) -> []string
 - localPkgsUsedInTypeExpr(expr ast.Expr, aliasToLocalPkgDir map[string]string) -> []string
 - parseGoFile(path string, out *outline.Outline, fileInfo *outline.FileInfo, fset *token.FileSet) -> error
 - receiverType(expr ast.Expr) -> string
 - recordGoCouplingSignals(d *ast.FuncDecl, fileInfo *outline.FileInfo, out *outline.Outline, aliasToLocalPkgDir map[string]string)
+- resolveLocalGoImport(out *outline.Outline, importPath string) -> string, bool
 - typeToString(expr ast.Expr) -> string
+
+---
+
+## internal/parser/gowork.go
+
+### Functions
+- findGoModules(scanRootAbs string) -> []goModule
+- findGoModulesFromWork(scanRootAbs string) -> []goModule
+- findNearestFileUp(startAbs string, name string) -> string
+- findNearestGoModModule(scanRootAbs string, startAbs string) -> goModule
+- parseGoWorkUseDirs(workContent string) -> []string
+- readGoModModulePath(goModPath string) -> string
+- sortModulesNearestFirst(mods []goModule)
+
+### Types
+- goModule (fields: DirAbs, DirRel, ModPath)
 
 ---
 
@@ -313,10 +304,10 @@ Files that depend on each file (useful for understanding change impact):
 
 ### Functions
 - ProcessFiles(root string, out *outline.Outline) -> error
+- assignGoModuleForFile(fileInfo *outline.FileInfo, scanRootAbs string, fileAbs string, modules []goModule)
 - buildPackageIndexAndResolveGoDeps(out *outline.Outline)
-- findGoModulePath(startAbs string) -> string
 - hasKnownFrontendExtension(path string) -> bool
-- processFile(path string, info os.FileInfo, out *outline.Outline, fset *token.FileSet, absRoot string) -> error
+- processFile(path string, info os.FileInfo, out *outline.Outline, fset *token.FileSet, absRoot string, modules []goModule) -> error
 - resolveAliasImports(out *outline.Outline) -> error
 - resolveLocalImport(fromFile string, dep string, out *outline.Outline) -> string
 - toRepoRelativePath(absRoot string, absPath string) -> string
@@ -330,6 +321,7 @@ Files that depend on each file (useful for understanding change impact):
 - WriteOutlineToFileWithPath(out *outline.Outline, filePath string) -> error
 - writeAIAgentGuidance(writer *bufio.Writer, out *outline.Outline)
 - writeChangeImpactAnalysis(writer *bufio.Writer, out *outline.Outline)
+- writeContracts(writer *bufio.Writer, out *outline.Outline)
 - writePublicAPISurface(writer *bufio.Writer, out *outline.Outline)
 - writeReverseDependencies(writer *bufio.Writer, out *outline.Outline)
 

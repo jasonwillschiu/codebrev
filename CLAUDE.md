@@ -71,10 +71,9 @@ codebrev is a dual-mode tool (CLI + MCP server) that analyzes codebases and gene
    - Package-level dependency graph for Go projects
 
 3. **Mermaid Layer** (`internal/mermaid/`)
-   - Generates three types of diagrams:
-     - File dependency graph (file-to-file) via `GenerateFileDependencyGraph()`
-     - Go package dependency graph (directory-based) via `GenerateGoPackageDependencyGraph()`
-     - Architecture overview (grouped by directory + external deps) via `GenerateArchitectureOverview()`
+   - Generates a single combined diagram:
+     - Dependency map (package anchors + key files) via `GenerateUnifiedDependencyMap()`
+   - External imports are intentionally omitted from the diagram; use `go.mod` (or module `go.mod` files in `go.work` workspaces) to inspect dependencies.
    - Edge weights based on coupling signals:
      - Weak (-->) : score < 2
      - Medium (-->) : score 2-5
@@ -83,12 +82,13 @@ codebrev is a dual-mode tool (CLI + MCP server) that analyzes codebases and gene
 
 4. **Writer Layer** (`internal/writer/`)
    - Formats `Outline` into markdown with sections:
-     - Mermaid diagrams
+     - Mermaid dependency map
+     - Contracts (struct tags + routes, best-effort)
      - AI agent guidelines
      - Change impact analysis (high/medium/low risk files and packages)
      - Public API surface
      - Reverse dependencies
-     - Per-file function/type/variable listings
+     - Per-file function/type listings (+ routes)
 
 ### Key Data Structures
 

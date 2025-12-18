@@ -164,7 +164,7 @@ func GenerateArchitectureOverview(out *outline.Outline) string {
 		// Collect external dependencies
 		fileInfo := out.Files[filePath]
 		for _, imp := range fileInfo.Imports {
-			if !isLocalImport(imp, out.ModulePath) {
+			if !isLocalImport(imp, out.ModulePaths) {
 				externalDeps[imp] = true
 			}
 		}
@@ -270,10 +270,12 @@ func getCleanDepName(dep string) string {
 }
 
 // isLocalImport determines if an import is local to the project
-func isLocalImport(imp, modulePath string) bool {
+func isLocalImport(imp string, modulePaths map[string]string) bool {
 	// Go local imports typically start with the module name or are relative.
-	if modulePath != "" && (imp == modulePath || strings.HasPrefix(imp, modulePath+"/")) {
-		return true
+	for _, modulePath := range modulePaths {
+		if modulePath != "" && (imp == modulePath || strings.HasPrefix(imp, modulePath+"/")) {
+			return true
+		}
 	}
 	if strings.HasPrefix(imp, "./") || strings.HasPrefix(imp, "../") {
 		return true
@@ -283,6 +285,187 @@ func isLocalImport(imp, modulePath string) bool {
 		return true
 	}
 	return false
+}
+
+// GenerateUnifiedDependencyMap creates a single mermaid diagram that combines:
+// - package-level dependencies (primary)
+// - a small set of key files per package (detail)
+// - external dependencies (top-N) connected to packages
+//
+// This is intended to be readable by both humans and LLMs without duplicating multiple graphs.
+func GenerateUnifiedDependencyMap(out *outline.Outline) string {
+	var sb strings.Builder
+
+	sb.WriteString("```mermaid\n")
+	sb.WriteString("graph TB\n")
+
+	// Stable package ordering.
+	var pkgs []string
+	for pkg := range out.Packages {
+		pkgs = append(pkgs, pkg)
+	}
+	sort.Strings(pkgs)
+
+	// Build package nodes and choose key files per package.
+	pkgToNode := make(map[string]string, len(pkgs))
+	keyFiles := make(map[string][]string, len(pkgs)) // pkg -> []filePath
+
+	// Precompute basename counts for better file labels.
+	baseCount := make(map[string]int)
+	for filePath := range out.Files {
+		baseCount[filepath.Base(filePath)]++
+	}
+
+	for i, pkg := range pkgs {
+		nodeID := fmt.Sprintf("P%d", i)
+		pkgToNode[pkg] = nodeID
+
+		impact := out.CalculatePackageChangeImpact(pkg)
+		nodeStyle := getNodeStyle(impact.RiskLevel)
+		label := pkg
+		if label == "." {
+			label = "root"
+		}
+
+		sb.WriteString(fmt.Sprintf("    %s[\"%s\"]%s\n", nodeID, label, nodeStyle))
+
+		// Pick key files (bounded).
+		pkgInfo := out.Packages[pkg]
+		var files []string
+		if pkgInfo != nil && pkgInfo.Representative != "" {
+			files = append(files, pkgInfo.Representative)
+		}
+
+		// Add public API files in this package.
+		for filePath := range out.PublicAPIs {
+			if !strings.HasPrefix(filepath.ToSlash(filePath), filepath.ToSlash(pkg)+"/") && !(pkg == "." && !strings.Contains(filePath, "/")) {
+				continue
+			}
+			files = append(files, filePath)
+		}
+
+		// Add high-risk files in this package.
+		if pkgInfo != nil {
+			for _, filePath := range pkgInfo.Files {
+				impact := out.CalculateChangeImpact(filePath)
+				if impact.RiskLevel == "high" {
+					files = append(files, filePath)
+				}
+			}
+		}
+
+		// Dedup and cap.
+		sort.Strings(files)
+		seen := make(map[string]bool)
+		var unique []string
+		for _, f := range files {
+			if f == "" || seen[f] {
+				continue
+			}
+			seen[f] = true
+			unique = append(unique, f)
+		}
+		if len(unique) > 3 {
+			unique = unique[:3]
+		}
+		keyFiles[pkg] = unique
+	}
+
+	// Create file nodes for selected key files.
+	fileToNode := make(map[string]string)
+	fileCounter := 0
+	for _, pkg := range pkgs {
+		files := keyFiles[pkg]
+		if len(files) == 0 {
+			continue
+		}
+
+		subgraphName := "pkg_" + strings.NewReplacer("/", "_", "-", "_", ".", "root").Replace(pkg)
+		label := pkg
+		if label == "." {
+			label = "root"
+		}
+		sb.WriteString(fmt.Sprintf("\n    subgraph %s [\"%s\"]\n", subgraphName, label))
+		sb.WriteString(fmt.Sprintf("        %s\n", pkgToNode[pkg]))
+
+		for _, filePath := range files {
+			nodeID := fmt.Sprintf("F%d", fileCounter)
+			fileCounter++
+			fileToNode[filePath] = nodeID
+
+			impact := out.CalculateChangeImpact(filePath)
+			nodeStyle := getNodeStyle(impact.RiskLevel)
+			label := disambiguatedFileLabel(filePath, baseCount)
+			sb.WriteString(fmt.Sprintf("        %s[\"%s\"]%s\n", nodeID, label, nodeStyle))
+
+			// Connect package anchor to key file for discoverability.
+			sb.WriteString(fmt.Sprintf("        %s --> %s\n", pkgToNode[pkg], nodeID))
+		}
+		sb.WriteString("    end\n")
+	}
+
+	// Add package dependency edges (primary edges).
+	sb.WriteString("\n")
+	for _, fromPkg := range pkgs {
+		fromNode := pkgToNode[fromPkg]
+		toPkgs := out.PackageDeps[fromPkg]
+		if len(toPkgs) == 0 {
+			continue
+		}
+		for _, toPkg := range toPkgs {
+			toNode, ok := pkgToNode[toPkg]
+			if !ok {
+				continue
+			}
+			strength := getPackageDependencyStrength(out, fromPkg, toPkg)
+			arrow := getArrowStyle(strength)
+			sb.WriteString(fmt.Sprintf("    %s %s %s\n", fromNode, arrow, toNode))
+		}
+	}
+
+	// Add file-level edges for selected key files only.
+	sb.WriteString("\n")
+	var selectedFiles []string
+	for f := range fileToNode {
+		selectedFiles = append(selectedFiles, f)
+	}
+	sort.Strings(selectedFiles)
+
+	for _, fromFile := range selectedFiles {
+		fromNode := fileToNode[fromFile]
+		fi := out.Files[fromFile]
+		if fi == nil {
+			continue
+		}
+		for _, dep := range fi.LocalDeps {
+			toNode, ok := fileToNode[dep]
+			if !ok {
+				continue
+			}
+			strength := getDependencyStrength(out, fromFile, dep)
+			arrow := getArrowStyle(strength)
+			sb.WriteString(fmt.Sprintf("    %s %s %s\n", fromNode, arrow, toNode))
+		}
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString("    classDef highRisk fill:#ffcccc,stroke:#ff0000,stroke-width:2px\n")
+	sb.WriteString("    classDef mediumRisk fill:#fff3cd,stroke:#ffc107,stroke-width:2px\n")
+	sb.WriteString("    classDef lowRisk fill:#d4edda,stroke:#28a745,stroke-width:2px\n")
+	sb.WriteString("```\n")
+	return sb.String()
+}
+
+func disambiguatedFileLabel(filePath string, baseCount map[string]int) string {
+	base := filepath.Base(filePath)
+	if baseCount[base] <= 1 {
+		return getShortFileName(filePath)
+	}
+	parts := strings.Split(filepath.ToSlash(filePath), "/")
+	if len(parts) >= 2 {
+		return parts[len(parts)-2] + "/" + parts[len(parts)-1]
+	}
+	return filePath
 }
 
 // getDependencyStrength calculates the strength of dependency between two files

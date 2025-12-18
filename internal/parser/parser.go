@@ -19,7 +19,18 @@ func ProcessFiles(root string, out *outline.Outline) error {
 		return err
 	}
 	out.RootDir = absRoot
-	out.ModulePath = findGoModulePath(absRoot)
+	modules := findGoModules(absRoot)
+	out.ModulePaths = make(map[string]string)
+	for _, m := range modules {
+		out.ModulePaths[m.DirRel] = m.ModPath
+		if m.DirRel == "." && out.ModulePath == "" {
+			out.ModulePath = m.ModPath
+		}
+	}
+	// Back-compat: if we only discovered one module, mirror it to ModulePath.
+	if out.ModulePath == "" && len(modules) == 1 {
+		out.ModulePath = modules[0].ModPath
+	}
 
 	// Load gitignore patterns
 	gitignoreRules := gitignore.New(absRoot)
@@ -27,7 +38,7 @@ func ProcessFiles(root string, out *outline.Outline) error {
 	// Check if root is a single file
 	if info, err := os.Stat(absRoot); err == nil && !info.IsDir() {
 		// Process single file
-		return processFile(absRoot, info, out, fset, absRoot)
+		return processFile(absRoot, info, out, fset, absRoot, modules)
 	}
 
 	// Walk directory tree
@@ -45,7 +56,7 @@ func ProcessFiles(root string, out *outline.Outline) error {
 			return nil
 		}
 
-		return processFile(path, info, out, fset, absRoot)
+		return processFile(path, info, out, fset, absRoot, modules)
 	})
 
 	if err != nil {
@@ -63,7 +74,7 @@ func ProcessFiles(root string, out *outline.Outline) error {
 }
 
 // processFile processes a single file based on its extension
-func processFile(path string, info os.FileInfo, out *outline.Outline, fset *token.FileSet, absRoot string) error {
+func processFile(path string, info os.FileInfo, out *outline.Outline, fset *token.FileSet, absRoot string, modules []goModule) error {
 	if info.IsDir() {
 		return nil
 	}
@@ -93,6 +104,7 @@ func processFile(path string, info os.FileInfo, out *outline.Outline, fset *toke
 
 	// Handle different file types
 	if strings.HasSuffix(path, ".go") {
+		assignGoModuleForFile(fileInfo, absRoot, path, modules)
 		return parseGoFile(path, out, fileInfo, fset)
 	} else if strings.HasSuffix(path, ".astro") {
 		// Use custom Astro parser for better extraction
@@ -114,33 +126,27 @@ func toRepoRelativePath(absRoot, absPath string) string {
 	return filepath.ToSlash(rel)
 }
 
-// findGoModulePath finds the nearest go.mod and extracts its "module ..." line.
-// Returns empty string when not found or unreadable.
-func findGoModulePath(startAbs string) string {
-	dir := startAbs
-
-	if info, err := os.Stat(startAbs); err == nil && !info.IsDir() {
-		dir = filepath.Dir(startAbs)
+func assignGoModuleForFile(fileInfo *outline.FileInfo, scanRootAbs, fileAbs string, modules []goModule) {
+	// Select the deepest module directory that contains this file.
+	for _, m := range modules {
+		if m.DirAbs == "" || m.ModPath == "" {
+			continue
+		}
+		rel, err := filepath.Rel(m.DirAbs, fileAbs)
+		if err != nil {
+			continue
+		}
+		if rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "..") {
+			fileInfo.ModuleDir = m.DirRel
+			fileInfo.ModulePath = m.ModPath
+			return
+		}
 	}
 
-	for {
-		goModPath := filepath.Join(dir, "go.mod")
-		if content, err := os.ReadFile(goModPath); err == nil {
-			lines := strings.Split(string(content), "\n")
-			for _, line := range lines {
-				line = strings.TrimSpace(line)
-				if strings.HasPrefix(line, "module ") {
-					return strings.TrimSpace(strings.TrimPrefix(line, "module "))
-				}
-			}
-			return ""
-		}
-
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
+	// Fall back to a nearest-go.mod lookup for single-file scans.
+	if mod := findNearestGoModModule(scanRootAbs, fileAbs); mod.ModPath != "" {
+		fileInfo.ModuleDir = mod.DirRel
+		fileInfo.ModulePath = mod.ModPath
 	}
 }
 
