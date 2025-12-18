@@ -83,6 +83,65 @@ func GenerateFileDependencyGraph(out *outline.Outline) string {
 	return sb.String()
 }
 
+// GenerateGoPackageDependencyGraph creates a mermaid diagram showing Go package-to-package dependencies.
+// Packages are repo-relative directories (e.g. "internal/parser" or ".").
+func GenerateGoPackageDependencyGraph(out *outline.Outline) string {
+	var sb strings.Builder
+
+	// Only show this graph if we actually parsed Go packages.
+	goPackages := collectGoPackages(out)
+	if len(goPackages) == 0 {
+		return ""
+	}
+
+	sb.WriteString("```mermaid\n")
+	sb.WriteString("graph TD\n")
+
+	// Stable ordering.
+	sort.Strings(goPackages)
+
+	pkgToNode := make(map[string]string, len(goPackages))
+	for i, pkg := range goPackages {
+		nodeID := fmt.Sprintf("P%d", i)
+		pkgToNode[pkg] = nodeID
+
+		impact := out.CalculatePackageChangeImpact(pkg)
+		nodeStyle := getNodeStyle(impact.RiskLevel)
+
+		label := pkg
+		if label == "." {
+			label = "root"
+		}
+		sb.WriteString(fmt.Sprintf("    %s[\"%s\"]%s\n", nodeID, label, nodeStyle))
+	}
+
+	sb.WriteString("\n")
+
+	for _, fromPkg := range goPackages {
+		fromNode := pkgToNode[fromPkg]
+		toPkgs := out.PackageDeps[fromPkg]
+		if len(toPkgs) == 0 {
+			continue
+		}
+		for _, toPkg := range toPkgs {
+			toNode, ok := pkgToNode[toPkg]
+			if !ok {
+				continue
+			}
+			strength := getPackageDependencyStrength(out, fromPkg, toPkg)
+			arrow := getArrowStyle(strength)
+			sb.WriteString(fmt.Sprintf("    %s %s %s\n", fromNode, arrow, toNode))
+		}
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString("    classDef highRisk fill:#ffcccc,stroke:#ff0000,stroke-width:2px\n")
+	sb.WriteString("    classDef mediumRisk fill:#fff3cd,stroke:#ffc107,stroke-width:2px\n")
+	sb.WriteString("    classDef lowRisk fill:#d4edda,stroke:#28a745,stroke-width:2px\n")
+	sb.WriteString("```\n")
+	return sb.String()
+}
+
 // GenerateArchitectureOverview creates a human-readable architecture diagram
 // This shows the overall structure with directory groupings and external dependencies
 func GenerateArchitectureOverview(out *outline.Outline) string {
@@ -105,7 +164,7 @@ func GenerateArchitectureOverview(out *outline.Outline) string {
 		// Collect external dependencies
 		fileInfo := out.Files[filePath]
 		for _, imp := range fileInfo.Imports {
-			if !isLocalImport(imp) {
+			if !isLocalImport(imp, out.ModulePath) {
 				externalDeps[imp] = true
 			}
 		}
@@ -211,9 +270,9 @@ func getCleanDepName(dep string) string {
 }
 
 // isLocalImport determines if an import is local to the project
-func isLocalImport(imp string) bool {
-	// Go local imports typically start with the module name or are relative
-	if strings.HasPrefix(imp, "code4context/") {
+func isLocalImport(imp, modulePath string) bool {
+	// Go local imports typically start with the module name or are relative.
+	if modulePath != "" && (imp == modulePath || strings.HasPrefix(imp, modulePath+"/")) {
 		return true
 	}
 	if strings.HasPrefix(imp, "./") || strings.HasPrefix(imp, "../") {
@@ -232,36 +291,59 @@ func getDependencyStrength(out *outline.Outline, from, to string) string {
 	if fromFile == nil {
 		return "weak"
 	}
+	toFile := out.Files[to]
 
-	// Count how many times 'to' appears in 'from's dependencies
-	count := 0
+	// For Go repos, prefer package-level coupling strength.
+	if toFile != nil && fromFile.PackageName != "" && toFile.PackageName != "" {
+		fromPkg := fromFile.PackageDir
+		if fromPkg == "" {
+			fromPkg = "."
+		}
+		toPkg := toFile.PackageDir
+		if toPkg == "" {
+			toPkg = "."
+		}
+		return getPackageDependencyStrength(out, fromPkg, toPkg)
+	}
+
+	// For other languages, treat an explicit resolved file dependency as medium.
 	for _, dep := range fromFile.LocalDeps {
-		if dep == to || strings.Contains(to, dep) {
-			count++
+		if dep == to {
+			return "medium"
 		}
 	}
+	return "weak"
+}
 
-	// Check function calls and type usage for stronger dependencies
-	for _, funcInfo := range fromFile.Functions {
-		for _, call := range funcInfo.CallsTo {
-			if strings.Contains(call, to) {
-				count += 2 // Function calls are stronger dependencies
-			}
+func collectGoPackages(out *outline.Outline) []string {
+	seen := make(map[string]bool)
+	var pkgs []string
+	for _, fi := range out.Files {
+		if fi.PackageName == "" {
+			continue
 		}
-		for _, typeUsed := range funcInfo.UsesTypes {
-			if out.TypeUsage[typeUsed] != nil {
-				for _, usage := range out.TypeUsage[typeUsed] {
-					if strings.Contains(usage, to) {
-						count += 1 // Type usage is moderate dependency
-					}
-				}
-			}
+		pkg := fi.PackageDir
+		if pkg == "" {
+			pkg = "."
+		}
+		if !seen[pkg] {
+			seen[pkg] = true
+			pkgs = append(pkgs, pkg)
 		}
 	}
+	return pkgs
+}
 
-	if count > 5 {
+func getPackageDependencyStrength(out *outline.Outline, fromPkg, toPkg string) string {
+	statsByTo := out.PackageEdgeStats[fromPkg]
+	stat := statsByTo[toPkg]
+	score := stat.Imports + (2 * stat.TypeUses) + (3 * stat.Calls)
+
+	// Thresholds tuned to keep graphs readable: strong only when we have more than "just an import".
+	if score >= 6 {
 		return "strong"
-	} else if count > 2 {
+	}
+	if score >= 2 {
 		return "medium"
 	}
 	return "weak"

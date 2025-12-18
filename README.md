@@ -18,8 +18,9 @@ Code4Context creates comprehensive code summaries (`codebrev.md`) that help AI a
 - **Smart Caching**: Checks for existing `codebrev.md` files before regenerating
 - **Multi-Language Support**: Go, JavaScript, TypeScript, Astro, and more
 - **Dependency Analysis**: Tracks imports, exports, and file relationships
-- **Visual Diagrams**: Mermaid diagrams for file dependencies and architecture
-- **Change Impact Analysis**: Identifies affected functions and files when making changes
+- **Go Package Analysis**: Package-level dependency graphs with coupling signals (imports, calls, type uses)
+- **Visual Diagrams**: Mermaid diagrams for file dependencies, package dependencies, and architecture
+- **Change Impact Analysis**: Identifies affected functions, files, and packages when making changes
 - **AI-Optimized Output**: Structured for LLM consumption with clear signatures and types
 - **MCP Compatible**: Works with Claude, Cursor, Windsurf, OpenCode, and other MCP clients
 
@@ -202,6 +203,16 @@ The server is built on top of the existing code4context functionality:
 - Uses the same parser and writer modules
 - Integrates with `mark3labs/mcp-go` for MCP protocol support
 - Maintains compatibility with the original CLI tool
+
+### Taskfile (recommended)
+
+This repo ships with a `Taskfile.yml` so you can use `task` instead of the older `cicd.js` workflow.
+
+Common commands:
+
+- `task build` - build `bin/code4context`
+- `task gen -- DIR=.` - generate `codebrev.md` for a directory
+- `task release` - commit/tag/push based on `changelog.md` (uses `tools/release-tool`)
 
 ## Troubleshooting
 

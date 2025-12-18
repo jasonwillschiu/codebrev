@@ -1,3 +1,10 @@
+# 0.6.0 - Add: Go package-level dependency tracking
+- Package-level dependency graphs with coupling signals
+- EdgeStat tracking: imports, cross-package calls, type uses
+- Package-level change impact analysis with risk levels
+- New Mermaid diagram: GenerateGoPackageDependencyGraph()
+- Edge weights based on coupling strength (weak/medium/strong)
+
 # 0.5.3 - Update: README and AGENTS.md
 - update docs
 

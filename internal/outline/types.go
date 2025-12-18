@@ -1,7 +1,25 @@
 package outline
 
+// PackageInfo represents a Go package (directory) within the scanned project.
+// PackagePath is repo-relative (e.g. "internal/parser" or ".").
+type PackageInfo struct {
+	PackagePath    string
+	Files          []string // repo-relative file paths
+	Representative string   // a stable file path used for visualization
+}
+
+// EdgeStat represents aggregated coupling signals between two packages.
+type EdgeStat struct {
+	Imports  int
+	Calls    int
+	TypeUses int
+}
+
 // Outline represents the complete code structure analysis
 type Outline struct {
+	RootDir    string // absolute path to the scan root
+	ModulePath string // Go module path from go.mod (e.g. "github.com/acme/repo")
+
 	Files         map[string]*FileInfo
 	Types         map[string]*TypeInfo
 	Vars          []string
@@ -12,6 +30,13 @@ type Outline struct {
 	ReverseDeps   map[string][]string    // file -> files that depend on it
 	PublicAPIs    map[string][]string    // file -> public functions/types
 	ChangeImpact  map[string]*ImpactInfo // file -> impact analysis
+
+	// Go package-level relationships (repo-relative package paths).
+	Packages           map[string]*PackageInfo
+	PackageDeps        map[string][]string            // package -> packages it depends on
+	PackageReverseDeps map[string][]string            // package -> packages that depend on it
+	PackageImpact      map[string]*ImpactInfo         // package -> impact analysis
+	PackageEdgeStats   map[string]map[string]EdgeStat // fromPkg -> toPkg -> stats
 }
 
 // FunctionInfo represents a function with its signature
@@ -28,12 +53,18 @@ type FunctionInfo struct {
 
 // FileInfo represents information about a single file
 type FileInfo struct {
-	Path          string
+	Path       string // repo-relative
+	AbsPath    string // absolute (used for parsing/reading)
+	PackageDir string // repo-relative directory (e.g. "internal/parser" or ".")
+	// PackageName is the Go package name (e.g. "parser"); empty for non-Go files.
+	PackageName string
+
 	Functions     []FunctionInfo
 	Types         []string
 	Vars          []string
 	Imports       []string  // external imports (packages/modules)
-	LocalDeps     []string  // local file dependencies
+	LocalDeps     []string  // local file dependencies (repo-relative file paths, resolved)
+	LocalPkgDeps  []string  // local Go package dependencies (repo-relative dirs)
 	ExportedFuncs []string  // Public functions
 	ExportedTypes []string  // Public types
 	TestCoverage  *TestInfo // Test coverage information
@@ -78,6 +109,12 @@ func New() *Outline {
 		ReverseDeps:   make(map[string][]string),
 		PublicAPIs:    make(map[string][]string),
 		ChangeImpact:  make(map[string]*ImpactInfo),
+
+		Packages:           make(map[string]*PackageInfo),
+		PackageDeps:        make(map[string][]string),
+		PackageReverseDeps: make(map[string][]string),
+		PackageImpact:      make(map[string]*ImpactInfo),
+		PackageEdgeStats:   make(map[string]map[string]EdgeStat),
 	}
 }
 
@@ -91,8 +128,11 @@ func (o *Outline) EnsureType(name string) *TypeInfo {
 }
 
 // AddFile adds a new file to the outline
-func (o *Outline) AddFile(path string) *FileInfo {
-	fileInfo := &FileInfo{Path: path}
+func (o *Outline) AddFile(path, absPath string) *FileInfo {
+	fileInfo := &FileInfo{
+		Path:    path,
+		AbsPath: absPath,
+	}
 	o.Files[path] = fileInfo
 	return fileInfo
 }
@@ -112,6 +152,88 @@ func (o *Outline) AddDependency(from, to string) {
 
 	// Also update reverse dependencies
 	o.AddReverseDependency(to, from)
+}
+
+// AddPackageDependency adds a package-level dependency relationship.
+func (o *Outline) AddPackageDependency(fromPkg, toPkg string) {
+	if fromPkg == "" || toPkg == "" || fromPkg == toPkg {
+		return
+	}
+	if o.PackageDeps[fromPkg] == nil {
+		o.PackageDeps[fromPkg] = []string{}
+	}
+	for _, dep := range o.PackageDeps[fromPkg] {
+		if dep == toPkg {
+			return
+		}
+	}
+	o.PackageDeps[fromPkg] = append(o.PackageDeps[fromPkg], toPkg)
+	o.AddPackageReverseDependency(toPkg, fromPkg)
+}
+
+// AddPackageReverseDependency adds a reverse package dependency relationship.
+func (o *Outline) AddPackageReverseDependency(toPkg, fromPkg string) {
+	if o.PackageReverseDeps[toPkg] == nil {
+		o.PackageReverseDeps[toPkg] = []string{}
+	}
+	for _, dep := range o.PackageReverseDeps[toPkg] {
+		if dep == fromPkg {
+			return
+		}
+	}
+	o.PackageReverseDeps[toPkg] = append(o.PackageReverseDeps[toPkg], fromPkg)
+}
+
+// AddPackageEdgeStat records coupling signals for a package dependency edge.
+func (o *Outline) AddPackageEdgeStat(fromPkg, toPkg string, stat EdgeStat) {
+	if fromPkg == "" || toPkg == "" || fromPkg == toPkg {
+		return
+	}
+	if o.PackageEdgeStats[fromPkg] == nil {
+		o.PackageEdgeStats[fromPkg] = make(map[string]EdgeStat)
+	}
+	current := o.PackageEdgeStats[fromPkg][toPkg]
+	current.Imports += stat.Imports
+	current.Calls += stat.Calls
+	current.TypeUses += stat.TypeUses
+	o.PackageEdgeStats[fromPkg][toPkg] = current
+}
+
+// CalculatePackageChangeImpact calculates the impact of changing a package.
+func (o *Outline) CalculatePackageChangeImpact(packagePath string) *ImpactInfo {
+	impact := &ImpactInfo{
+		DirectDependents:   o.PackageReverseDeps[packagePath],
+		IndirectDependents: []string{},
+		RiskLevel:          "low",
+		TestsAffected:      []string{},
+	}
+
+	visited := make(map[string]bool)
+	o.findIndirectPackageDependents(packagePath, visited, &impact.IndirectDependents)
+
+	totalDeps := len(impact.DirectDependents) + len(impact.IndirectDependents)
+	if totalDeps > 10 {
+		impact.RiskLevel = "high"
+	} else if totalDeps > 3 {
+		impact.RiskLevel = "medium"
+	}
+
+	o.PackageImpact[packagePath] = impact
+	return impact
+}
+
+func (o *Outline) findIndirectPackageDependents(packagePath string, visited map[string]bool, result *[]string) {
+	if visited[packagePath] {
+		return
+	}
+	visited[packagePath] = true
+
+	for _, dep := range o.PackageReverseDeps[packagePath] {
+		if !visited[dep] {
+			*result = append(*result, dep)
+			o.findIndirectPackageDependents(dep, visited, result)
+		}
+	}
 }
 
 // AddReverseDependency adds a reverse dependency relationship

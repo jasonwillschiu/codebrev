@@ -39,8 +39,10 @@ Code4Context generates structured summaries of codebases specifically designed f
 - Interface definitions with method signatures
 - Methods now appear both in their file sections and as type methods
 - Method signatures include receiver type for clarity (e.g., `(TypeName) methodName()`)
-- Dependency tracking between packages
+- Package-level dependency tracking with coupling signals
 - Function call graph analysis
+- Cross-package type usage tracking
+- Package-level change impact analysis
 
 **JavaScript/TypeScript (.js, .jsx, .ts, .tsx)**
 - Regex-based parsing optimized for LLM context extraction
@@ -171,8 +173,9 @@ graph TB
 - Removing public APIs
 
 ## Change Impact Analysis
-- Direct and indirect dependents for any file
-- Risk assessment for modifications
+- Direct and indirect dependents for files and packages
+- Risk assessment at both file and package levels
+- Package coupling strength via EdgeStat (imports, calls, type uses)
 - Test coverage impact
 ```
 

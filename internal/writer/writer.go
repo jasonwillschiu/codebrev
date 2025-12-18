@@ -35,6 +35,16 @@ func WriteOutlineToFile(out *outline.Outline) error {
 	fmt.Fprint(writer, mermaid.GenerateFileDependencyGraph(out))
 	fmt.Fprintln(writer, "")
 
+	// Go package graph (when applicable)
+	if pkgGraph := mermaid.GenerateGoPackageDependencyGraph(out); pkgGraph != "" {
+		fmt.Fprintln(writer, "## Go Package Dependency Graph (LLM Context)")
+		fmt.Fprintln(writer, "")
+		fmt.Fprintln(writer, "This diagram shows Go package-to-package dependencies (directory-based), with edges weighted by imports, cross-package calls, and cross-package type usage.")
+		fmt.Fprintln(writer, "")
+		fmt.Fprint(writer, pkgGraph)
+		fmt.Fprintln(writer, "")
+	}
+
 	fmt.Fprintln(writer, "## Architecture Overview (Human Context)")
 	fmt.Fprintln(writer, "")
 	fmt.Fprintln(writer, "This diagram provides a high-level view of the codebase structure with directory groupings and external dependencies.")
@@ -145,6 +155,16 @@ func WriteOutlineToFileWithPath(out *outline.Outline, filePath string) error {
 	fmt.Fprintln(writer, "")
 	fmt.Fprint(writer, mermaid.GenerateFileDependencyGraph(out))
 	fmt.Fprintln(writer, "")
+
+	// Go package graph (when applicable)
+	if pkgGraph := mermaid.GenerateGoPackageDependencyGraph(out); pkgGraph != "" {
+		fmt.Fprintln(writer, "## Go Package Dependency Graph (LLM Context)")
+		fmt.Fprintln(writer, "")
+		fmt.Fprintln(writer, "This diagram shows Go package-to-package dependencies (directory-based), with edges weighted by imports, cross-package calls, and cross-package type usage.")
+		fmt.Fprintln(writer, "")
+		fmt.Fprint(writer, pkgGraph)
+		fmt.Fprintln(writer, "")
+	}
 
 	fmt.Fprintln(writer, "## Architecture Overview (Human Context)")
 	fmt.Fprintln(writer, "")
@@ -315,6 +335,61 @@ func writeChangeImpactAnalysis(writer *bufio.Writer, out *outline.Outline) {
 				path, len(impact.DirectDependents), len(impact.IndirectDependents))
 		}
 		fmt.Fprintln(writer, "")
+	}
+
+	// Go package-level impact (more stable for Go repos).
+	if len(out.PackageDeps) > 0 || len(out.PackageReverseDeps) > 0 {
+		pkgSet := make(map[string]bool)
+		for pkgPath := range out.PackageDeps {
+			pkgSet[pkgPath] = true
+		}
+		for pkgPath := range out.PackageReverseDeps {
+			pkgSet[pkgPath] = true
+		}
+
+		var pkgPaths []string
+		for pkgPath := range pkgSet {
+			pkgPaths = append(pkgPaths, pkgPath)
+			out.CalculatePackageChangeImpact(pkgPath)
+		}
+		sort.Strings(pkgPaths)
+
+		pkgHighRisk := []string{}
+		pkgMediumRisk := []string{}
+		for _, pkgPath := range pkgPaths {
+			impact := out.PackageImpact[pkgPath]
+			if impact == nil {
+				continue
+			}
+			switch impact.RiskLevel {
+			case "high":
+				pkgHighRisk = append(pkgHighRisk, pkgPath)
+			case "medium":
+				pkgMediumRisk = append(pkgMediumRisk, pkgPath)
+			}
+		}
+
+		if len(pkgHighRisk) > 0 || len(pkgMediumRisk) > 0 {
+			fmt.Fprintln(writer, "### Go Package Risk (directory-level):")
+			if len(pkgHighRisk) > 0 {
+				fmt.Fprintln(writer, "#### High-Risk Packages (many dependents):")
+				for _, pkg := range pkgHighRisk {
+					impact := out.PackageImpact[pkg]
+					fmt.Fprintf(writer, "- **%s**: %d direct + %d indirect dependent packages\n",
+						pkg, len(impact.DirectDependents), len(impact.IndirectDependents))
+				}
+				fmt.Fprintln(writer, "")
+			}
+			if len(pkgMediumRisk) > 0 {
+				fmt.Fprintln(writer, "#### Medium-Risk Packages:")
+				for _, pkg := range pkgMediumRisk {
+					impact := out.PackageImpact[pkg]
+					fmt.Fprintf(writer, "- **%s**: %d direct + %d indirect dependent packages\n",
+						pkg, len(impact.DirectDependents), len(impact.IndirectDependents))
+				}
+				fmt.Fprintln(writer, "")
+			}
+		}
 	}
 }
 

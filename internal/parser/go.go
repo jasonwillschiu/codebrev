@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"log"
+	"path/filepath"
 	"strings"
 
 	"code4context/internal/outline"
@@ -18,22 +19,39 @@ func parseGoFile(path string, out *outline.Outline, fileInfo *outline.FileInfo, 
 		return nil
 	}
 
+	fileInfo.PackageName = file.Name.Name
+
+	aliasToLocalPkgDir := make(map[string]string)
+
 	// Process imports first
 	for _, imp := range file.Imports {
 		importPath := strings.Trim(imp.Path.Value, "\"")
 		fileInfo.Imports = append(fileInfo.Imports, importPath)
 
-		// Check if it's a local import
-		if strings.HasPrefix(importPath, "code4context/") {
-			// Convert import path to actual file paths that exist
-			localPath := strings.TrimPrefix(importPath, "code4context/")
+		alias := ""
+		if imp.Name != nil {
+			alias = imp.Name.Name
+		} else {
+			parts := strings.Split(importPath, "/")
+			alias = parts[len(parts)-1]
+		}
 
-			// For Go packages, we need to find the actual files in that directory
-			// For now, let's track the package dependency
-			fileInfo.LocalDeps = append(fileInfo.LocalDeps, localPath)
-			out.AddDependency(path, localPath)
+		// Check if it's a local import (module-aware).
+		if out.ModulePath != "" && (importPath == out.ModulePath || strings.HasPrefix(importPath, out.ModulePath+"/")) {
+			localPkgDir := strings.TrimPrefix(importPath, out.ModulePath)
+			localPkgDir = strings.TrimPrefix(localPkgDir, "/")
+			localPkgDir = filepath.ToSlash(localPkgDir)
+			if localPkgDir == "" {
+				localPkgDir = "."
+			}
+
+			fileInfo.LocalPkgDeps = append(fileInfo.LocalPkgDeps, localPkgDir)
+			aliasToLocalPkgDir[alias] = localPkgDir
+			out.AddPackageDependency(fileInfo.PackageDir, localPkgDir)
+			out.AddPackageEdgeStat(fileInfo.PackageDir, localPkgDir, outline.EdgeStat{Imports: 1})
 		}
 	}
+
 	ast.Inspect(file, func(n ast.Node) bool {
 		switch d := n.(type) {
 
@@ -53,7 +71,7 @@ func parseGoFile(path string, out *outline.Outline, fileInfo *outline.FileInfo, 
 					// Track public types
 					if ti.IsPublic {
 						fileInfo.ExportedTypes = append(fileInfo.ExportedTypes, typeName)
-						out.PublicAPIs[path] = append(out.PublicAPIs[path], "type:"+typeName)
+						out.PublicAPIs[fileInfo.Path] = append(out.PublicAPIs[fileInfo.Path], "type:"+typeName)
 					}
 
 					if st, ok := ts.Type.(*ast.StructType); ok {
@@ -90,18 +108,21 @@ func parseGoFile(path string, out *outline.Outline, fileInfo *outline.FileInfo, 
 				// Track public APIs
 				if funcInfo.IsPublic {
 					fileInfo.ExportedFuncs = append(fileInfo.ExportedFuncs, funcInfo.Name)
-					out.PublicAPIs[path] = append(out.PublicAPIs[path], funcInfo.Name)
+					out.PublicAPIs[fileInfo.Path] = append(out.PublicAPIs[fileInfo.Path], funcInfo.Name)
 				}
 
 				// Track function calls
 				for _, callee := range funcInfo.CallsTo {
-					out.AddFunctionCall(path+":"+funcInfo.Name, callee)
+					out.AddFunctionCall(fileInfo.Path+":"+funcInfo.Name, callee)
 				}
 
 				// Track type usage
 				for _, typeName := range funcInfo.UsesTypes {
-					out.AddTypeUsage(typeName, path+":"+funcInfo.Name)
+					out.AddTypeUsage(typeName, fileInfo.Path+":"+funcInfo.Name)
 				}
+
+				// Package-level coupling signals (calls + type uses across local packages)
+				recordGoCouplingSignals(d, fileInfo, out, aliasToLocalPkgDir)
 			} else { // method with receiver
 				recv := receiverType(d.Recv.List[0].Type)
 				typeInfo := out.EnsureType(recv)
@@ -116,18 +137,118 @@ func parseGoFile(path string, out *outline.Outline, fileInfo *outline.FileInfo, 
 
 				// Track function calls for methods
 				for _, callee := range funcInfo.CallsTo {
-					out.AddFunctionCall(path+":"+funcInfo.Name, callee)
+					out.AddFunctionCall(fileInfo.Path+":"+funcInfo.Name, callee)
 				}
 
 				// Track type usage for methods
 				for _, typeName := range funcInfo.UsesTypes {
-					out.AddTypeUsage(typeName, path+":"+funcInfo.Name)
+					out.AddTypeUsage(typeName, fileInfo.Path+":"+funcInfo.Name)
 				}
+
+				recordGoCouplingSignals(d, fileInfo, out, aliasToLocalPkgDir)
 			}
 		}
 		return true
 	})
 	return nil
+}
+
+func recordGoCouplingSignals(d *ast.FuncDecl, fileInfo *outline.FileInfo, out *outline.Outline, aliasToLocalPkgDir map[string]string) {
+	fromPkg := fileInfo.PackageDir
+
+	// Type-level coupling from params/results.
+	if d.Type != nil {
+		if d.Type.Params != nil {
+			for _, param := range d.Type.Params.List {
+				for _, toPkg := range localPkgsUsedInTypeExpr(param.Type, aliasToLocalPkgDir) {
+					out.AddPackageDependency(fromPkg, toPkg)
+					out.AddPackageEdgeStat(fromPkg, toPkg, outline.EdgeStat{TypeUses: 1})
+				}
+			}
+		}
+		if d.Type.Results != nil {
+			for _, result := range d.Type.Results.List {
+				for _, toPkg := range localPkgsUsedInTypeExpr(result.Type, aliasToLocalPkgDir) {
+					out.AddPackageDependency(fromPkg, toPkg)
+					out.AddPackageEdgeStat(fromPkg, toPkg, outline.EdgeStat{TypeUses: 1})
+				}
+			}
+		}
+	}
+
+	// Call-level coupling from selector calls: alias.Sel(...)
+	if d.Body == nil {
+		return
+	}
+
+	ast.Inspect(d.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		xIdent, ok := sel.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		toPkg, ok := aliasToLocalPkgDir[xIdent.Name]
+		if !ok {
+			return true
+		}
+		out.AddPackageDependency(fromPkg, toPkg)
+		out.AddPackageEdgeStat(fromPkg, toPkg, outline.EdgeStat{Calls: 1})
+		return true
+	})
+}
+
+func localPkgsUsedInTypeExpr(expr ast.Expr, aliasToLocalPkgDir map[string]string) []string {
+	seen := make(map[string]bool)
+	var pkgs []string
+
+	var walk func(ast.Expr)
+	walk = func(e ast.Expr) {
+		switch t := e.(type) {
+		case *ast.Ident:
+			return
+		case *ast.StarExpr:
+			walk(t.X)
+		case *ast.ArrayType:
+			walk(t.Elt)
+		case *ast.MapType:
+			walk(t.Key)
+			walk(t.Value)
+		case *ast.SelectorExpr:
+			if id, ok := t.X.(*ast.Ident); ok {
+				if pkg, ok := aliasToLocalPkgDir[id.Name]; ok {
+					if !seen[pkg] {
+						seen[pkg] = true
+						pkgs = append(pkgs, pkg)
+					}
+				}
+			}
+		case *ast.ChanType:
+			walk(t.Value)
+		case *ast.Ellipsis:
+			walk(t.Elt)
+		case *ast.FuncType:
+			if t.Params != nil {
+				for _, p := range t.Params.List {
+					walk(p.Type)
+				}
+			}
+			if t.Results != nil {
+				for _, r := range t.Results.List {
+					walk(r.Type)
+				}
+			}
+		}
+	}
+
+	walk(expr)
+	return pkgs
 }
 
 // extractFunctionInfo extracts function information from AST
