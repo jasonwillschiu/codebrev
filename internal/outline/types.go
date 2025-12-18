@@ -153,10 +153,8 @@ func (o *Outline) AddDependency(from, to string) {
 		o.Dependencies[from] = []string{}
 	}
 	// Avoid duplicates
-	for _, dep := range o.Dependencies[from] {
-		if dep == to {
-			return
-		}
+	if containsString(o.Dependencies[from], to) {
+		return
 	}
 	o.Dependencies[from] = append(o.Dependencies[from], to)
 
@@ -172,10 +170,8 @@ func (o *Outline) AddPackageDependency(fromPkg, toPkg string) {
 	if o.PackageDeps[fromPkg] == nil {
 		o.PackageDeps[fromPkg] = []string{}
 	}
-	for _, dep := range o.PackageDeps[fromPkg] {
-		if dep == toPkg {
-			return
-		}
+	if containsString(o.PackageDeps[fromPkg], toPkg) {
+		return
 	}
 	o.PackageDeps[fromPkg] = append(o.PackageDeps[fromPkg], toPkg)
 	o.AddPackageReverseDependency(toPkg, fromPkg)
@@ -186,10 +182,8 @@ func (o *Outline) AddPackageReverseDependency(toPkg, fromPkg string) {
 	if o.PackageReverseDeps[toPkg] == nil {
 		o.PackageReverseDeps[toPkg] = []string{}
 	}
-	for _, dep := range o.PackageReverseDeps[toPkg] {
-		if dep == fromPkg {
-			return
-		}
+	if containsString(o.PackageReverseDeps[toPkg], fromPkg) {
+		return
 	}
 	o.PackageReverseDeps[toPkg] = append(o.PackageReverseDeps[toPkg], fromPkg)
 }
@@ -252,10 +246,8 @@ func (o *Outline) AddReverseDependency(to, from string) {
 		o.ReverseDeps[to] = []string{}
 	}
 	// Avoid duplicates
-	for _, dep := range o.ReverseDeps[to] {
-		if dep == from {
-			return
-		}
+	if containsString(o.ReverseDeps[to], from) {
+		return
 	}
 	o.ReverseDeps[to] = append(o.ReverseDeps[to], from)
 }
@@ -266,10 +258,8 @@ func (o *Outline) AddFunctionCall(caller, callee string) {
 		o.FunctionCalls[caller] = []string{}
 	}
 	// Avoid duplicates
-	for _, call := range o.FunctionCalls[caller] {
-		if call == callee {
-			return
-		}
+	if containsString(o.FunctionCalls[caller], callee) {
+		return
 	}
 	o.FunctionCalls[caller] = append(o.FunctionCalls[caller], callee)
 }
@@ -280,10 +270,8 @@ func (o *Outline) AddTypeUsage(typeName, usedBy string) {
 		o.TypeUsage[typeName] = []string{}
 	}
 	// Avoid duplicates
-	for _, usage := range o.TypeUsage[typeName] {
-		if usage == usedBy {
-			return
-		}
+	if containsString(o.TypeUsage[typeName], usedBy) {
+		return
 	}
 	o.TypeUsage[typeName] = append(o.TypeUsage[typeName], usedBy)
 }

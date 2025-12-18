@@ -121,8 +121,8 @@ func readGoModModulePath(goModPath string) string {
 	}
 	for _, line := range strings.Split(string(content), "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+		if rest, ok := strings.CutPrefix(line, "module "); ok {
+			return strings.TrimSpace(rest)
 		}
 	}
 	return ""
@@ -145,7 +145,7 @@ func parseGoWorkUseDirs(workContent string) []string {
 			continue
 		}
 
-		if strings.HasPrefix(line, "use ") && strings.HasSuffix(line, "(") {
+		if rest, ok := strings.CutPrefix(line, "use "); ok && strings.HasSuffix(rest, "(") {
 			inUseBlock = true
 			continue
 		}
@@ -162,8 +162,8 @@ func parseGoWorkUseDirs(workContent string) []string {
 			continue
 		}
 
-		if strings.HasPrefix(line, "use ") {
-			d := strings.TrimSpace(strings.TrimPrefix(line, "use "))
+		if rest, ok := strings.CutPrefix(line, "use "); ok {
+			d := strings.TrimSpace(rest)
 			d = strings.Trim(d, "\"")
 			if d != "" {
 				dirs = append(dirs, d)
@@ -176,7 +176,7 @@ func parseGoWorkUseDirs(workContent string) []string {
 
 func sortModulesNearestFirst(mods []goModule) {
 	// Sort by absolute path length desc (deepest first).
-	for i := 0; i < len(mods); i++ {
+	for i := range len(mods) {
 		for j := i + 1; j < len(mods); j++ {
 			if len(mods[j].DirAbs) > len(mods[i].DirAbs) {
 				mods[i], mods[j] = mods[j], mods[i]

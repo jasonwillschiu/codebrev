@@ -20,12 +20,6 @@ func parseTypeScriptFile(path string, out *outline.Outline, fileInfo *outline.Fi
 	return parseTypeScriptContentRegex(contentStr, out, fileInfo)
 }
 
-// parseTypeScriptContent parses TypeScript content with enhanced type extraction
-func parseTypeScriptContent(content string, out *outline.Outline, fileInfo *outline.FileInfo) error {
-	// Use enhanced regex-based parsing for pure Go solution
-	return parseTypeScriptContentRegex(content, out, fileInfo)
-}
-
 // parseTypeScriptContentRegex provides enhanced regex-based parsing for TypeScript constructs
 func parseTypeScriptContentRegex(content string, out *outline.Outline, fileInfo *outline.FileInfo) error {
 	scanner := bufio.NewScanner(strings.NewReader(content))
@@ -91,8 +85,8 @@ func parseTypeScriptContentRegex(content string, out *outline.Outline, fileInfo 
 				propName := matches[1]
 				optional := matches[2]
 				propType := strings.TrimSpace(matches[3])
-				if strings.HasSuffix(propType, ";") {
-					propType = strings.TrimSuffix(propType, ";")
+				if trimmed, ok := strings.CutSuffix(propType, ";"); ok {
+					propType = trimmed
 				}
 				if optional == "?" {
 					propName += "?"
@@ -152,8 +146,8 @@ func parseTypeScriptContentRegex(content string, out *outline.Outline, fileInfo 
 		if matches := typeRegex.FindStringSubmatch(line); len(matches) > 2 {
 			typeName := matches[1]
 			typeValue := strings.TrimSpace(matches[2])
-			if strings.HasSuffix(typeValue, ";") {
-				typeValue = strings.TrimSuffix(typeValue, ";")
+			if trimmed, ok := strings.CutSuffix(typeValue, ";"); ok {
+				typeValue = trimmed
 			}
 			fileInfo.Types = append(fileInfo.Types, typeName)
 			typeInfo := out.EnsureType(typeName)

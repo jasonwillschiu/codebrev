@@ -37,7 +37,7 @@ graph TB
 
     subgraph pkg_internal_outline ["internal/outline"]
         P3
-        F3["outline/dedup.go"]:::highRisk
+        F3["outline/contains.go"]:::highRisk
         P3 --> F3
         F4["outline/types.go"]:::lowRisk
         P3 --> F4
@@ -69,14 +69,14 @@ graph TB
     P2 ==> P3
     P4 ==> P3
     P4 --> P1
-    P5 ==> P2
+    P5 --> P2
     P5 ==> P3
 
     F2 ==> F3
     F5 ==> F3
     F6 --> F1
     F6 ==> F3
-    F7 ==> F2
+    F7 --> F2
     F7 ==> F3
     F0 --> F3
     F0 --> F5
@@ -106,14 +106,14 @@ These are extracted contract surfaces (best-effort) that commonly cause breakage
 - Adding new dependencies (check for circular deps)
 
 ### High-risk changes:
-- Modifying core types: FileInfo, Outline, ast, error, goModule, outline
+- Modifying core types: FileInfo, Outline, ast, error, goModule, outline, safeWriter
 - Changing package structure
 - Removing public APIs
 
 ## Change Impact Analysis
 
 ### High-Risk Files (many dependents):
-- **internal/outline/dedup.go**: 6 direct + 6 indirect dependents
+- **internal/outline/contains.go**: 6 direct + 6 indirect dependents
 
 ### Go Package Risk (directory-level):
 #### Medium-Risk Packages:
@@ -165,7 +165,7 @@ Files that depend on each file (useful for understanding change impact):
 ### internal/mermaid/generator.go is used by:
 - internal/writer/writer.go
 
-### internal/outline/dedup.go is used by:
+### internal/outline/contains.go is used by:
 - internal/mermaid/generator.go
 - internal/parser/go.go
 - internal/parser/parser.go
@@ -212,6 +212,13 @@ Files that depend on each file (useful for understanding change impact):
 - getPackageDependencyStrength(out *outline.Outline, fromPkg string, toPkg string) -> string
 - getShortFileName(filePath string) -> string
 - isLocalImport(imp string, modulePaths map[string]string) -> bool
+
+---
+
+## internal/outline/contains.go
+
+### Functions
+- containsString(haystack []string, needle string) -> bool
 
 ---
 
@@ -303,7 +310,6 @@ Files that depend on each file (useful for understanding change impact):
 
 ### Functions
 - parseParameters(paramsStr string) -> []string
-- parseTypeScriptContent(content string, out *outline.Outline, fileInfo *outline.FileInfo) -> error
 - parseTypeScriptContentRegex(content string, out *outline.Outline, fileInfo *outline.FileInfo) -> error
 - parseTypeScriptFile(path string, out *outline.Outline, fileInfo *outline.FileInfo) -> error
 - removeDuplicateStrings(slice []string) -> []string
@@ -313,13 +319,20 @@ Files that depend on each file (useful for understanding change impact):
 ## internal/writer/writer.go
 
 ### Functions
+- (safeWriter) Print(a unknown)
+- (safeWriter) Printf(format string, a unknown)
+- (safeWriter) Println(a unknown)
 - WriteOutlineToFile(out *outline.Outline) -> error
 - WriteOutlineToFileWithPath(out *outline.Outline, filePath string) -> error
-- writeAIAgentGuidance(writer *bufio.Writer, out *outline.Outline)
-- writeChangeImpactAnalysis(writer *bufio.Writer, out *outline.Outline)
-- writeContracts(writer *bufio.Writer, out *outline.Outline)
-- writePublicAPISurface(writer *bufio.Writer, out *outline.Outline)
-- writeReverseDependencies(writer *bufio.Writer, out *outline.Outline)
+- writeAIAgentGuidance(writer *safeWriter, out *outline.Outline)
+- writeChangeImpactAnalysis(writer *safeWriter, out *outline.Outline)
+- writeContracts(writer *safeWriter, out *outline.Outline)
+- writeOutline(w *safeWriter, out *outline.Outline)
+- writePublicAPISurface(writer *safeWriter, out *outline.Outline)
+- writeReverseDependencies(writer *safeWriter, out *outline.Outline)
+
+### Types
+- safeWriter (methods: Print, Printf, Println) (fields: w, err)
 
 ---
 

@@ -147,7 +147,7 @@ func (gi *Gitignore) loadGitignoreFile(gitignorePath string) {
 		// No .gitignore file at this level
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Get the directory containing this .gitignore file
 	baseDir := filepath.Dir(gitignorePath)
@@ -180,12 +180,7 @@ func (gi *Gitignore) loadGitignoreFromPath(path string) {
 
 	// Walk up the directory tree from this path to the git root, loading any .gitignore files we haven't seen yet
 	currentDir := dir
-	for {
-		// Check if we've already loaded this directory's .gitignore
-		if gi.LoadedDirs[currentDir] {
-			break
-		}
-
+	for !gi.LoadedDirs[currentDir] {
 		// Mark this directory as loaded
 		gi.LoadedDirs[currentDir] = true
 
@@ -208,8 +203,8 @@ func (gi *Gitignore) matchPattern(path, pattern string) bool {
 	pattern = filepath.ToSlash(pattern)
 
 	// Handle directory patterns (ending with /)
-	if strings.HasSuffix(pattern, "/") {
-		pattern = strings.TrimSuffix(pattern, "/")
+	if trimmed, ok := strings.CutSuffix(pattern, "/"); ok {
+		pattern = trimmed
 		// Check if path starts with the pattern (for directories)
 		return strings.HasPrefix(path, pattern+"/") || path == pattern
 	}

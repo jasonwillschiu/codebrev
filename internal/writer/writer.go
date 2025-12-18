@@ -11,115 +11,35 @@ import (
 	"github.com/jasonwillschiu/codebrev/internal/outline"
 )
 
+type safeWriter struct {
+	w   *bufio.Writer
+	err error
+}
+
+func (sw *safeWriter) Print(a ...any) {
+	if sw.err != nil {
+		return
+	}
+	_, sw.err = fmt.Fprint(sw.w, a...)
+}
+
+func (sw *safeWriter) Printf(format string, a ...any) {
+	if sw.err != nil {
+		return
+	}
+	_, sw.err = fmt.Fprintf(sw.w, format, a...)
+}
+
+func (sw *safeWriter) Println(a ...any) {
+	if sw.err != nil {
+		return
+	}
+	_, sw.err = fmt.Fprintln(sw.w, a...)
+}
+
 // WriteOutlineToFile writes the outline to codebrev.md
 func WriteOutlineToFile(out *outline.Outline) error {
-	file, err := os.Create("codebrev.md")
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	writer := bufio.NewWriter(file)
-	defer writer.Flush()
-
-	fmt.Fprintln(writer, "# Code Structure Outline")
-	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "This file provides an overview of available functions and types per file for LLM context.")
-	fmt.Fprintln(writer, "")
-
-	// Generate and include mermaid dependency map (single combined diagram)
-	fmt.Fprintln(writer, "## Dependency Map (LLM + Human Context)")
-	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "This diagram combines package-level dependencies and key files into a single readable map.")
-	fmt.Fprintln(writer, "Note: External imports are intentionally omitted here; check go.mod (or module go.mod files in go.work workspaces) for dependencies.")
-	fmt.Fprintln(writer, "")
-	fmt.Fprint(writer, mermaid.GenerateUnifiedDependencyMap(out))
-	fmt.Fprintln(writer, "")
-
-	// Write contract surfaces (routes + struct tags) for safer changes.
-	writeContracts(writer, out)
-
-	// Write AI Agent Guidance
-	writeAIAgentGuidance(writer, out)
-
-	// Write Change Impact Analysis
-	writeChangeImpactAnalysis(writer, out)
-
-	// Write Public API Surface
-	writePublicAPISurface(writer, out)
-
-	// Write Reverse Dependencies
-	writeReverseDependencies(writer, out)
-
-	// Sort file paths for consistent output
-	var filePaths []string
-	for path := range out.Files {
-		filePaths = append(filePaths, path)
-	}
-	sort.Strings(filePaths)
-
-	// Write file-by-file breakdown
-	for _, path := range filePaths {
-		fileInfo := out.Files[path]
-		fmt.Fprintf(writer, "## %s\n", path)
-		fmt.Fprintln(writer, "")
-
-		// Functions available in this file
-		if len(fileInfo.Functions) > 0 {
-			// Sort functions by name
-			sort.Slice(fileInfo.Functions, func(i, j int) bool {
-				return fileInfo.Functions[i].Name < fileInfo.Functions[j].Name
-			})
-			fmt.Fprintln(writer, "### Functions")
-			for _, f := range fileInfo.Functions {
-				params := strings.Join(f.Params, ", ")
-				if f.ReturnType != "" {
-					fmt.Fprintf(writer, "- %s(%s) -> %s\n", f.Name, params, f.ReturnType)
-				} else {
-					fmt.Fprintf(writer, "- %s(%s)\n", f.Name, params)
-				}
-			}
-			fmt.Fprintln(writer, "")
-		}
-
-		// Types/Structs/Classes available in this file
-		if len(fileInfo.Types) > 0 {
-			sort.Strings(fileInfo.Types)
-			fmt.Fprintln(writer, "### Types")
-			for _, t := range fileInfo.Types {
-				fmt.Fprintf(writer, "- %s", t)
-				if ti, exists := out.Types[t]; exists {
-					if len(ti.Methods) > 0 {
-						fmt.Fprintf(writer, " (methods: %s)", strings.Join(ti.Methods, ", "))
-					}
-					if len(ti.Fields) > 0 {
-						fmt.Fprintf(writer, " (fields: %s)", strings.Join(ti.Fields, ", "))
-					}
-					if len(ti.ContractKeys) > 0 {
-						fmt.Fprintf(writer, " (contracts: %s)", strings.Join(ti.ContractKeys, ", "))
-					}
-				}
-				fmt.Fprintln(writer, "")
-			}
-			fmt.Fprintln(writer, "")
-		}
-
-		// Routes extracted from this file (best-effort).
-		if len(fileInfo.Routes) > 0 {
-			sort.Strings(fileInfo.Routes)
-			fmt.Fprintln(writer, "### Routes")
-			for _, r := range fileInfo.Routes {
-				fmt.Fprintf(writer, "- %s\n", r)
-			}
-			fmt.Fprintln(writer, "")
-		}
-
-		fmt.Fprintln(writer, "---")
-		fmt.Fprintln(writer, "")
-	}
-
-	fmt.Println("Code outline written to codebrev.md")
-	return nil
+	return WriteOutlineToFileWithPath(out, "codebrev.md")
 }
 
 // WriteOutlineToFileWithPath writes the outline to a specified file path
@@ -128,38 +48,53 @@ func WriteOutlineToFileWithPath(out *outline.Outline, filePath string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	sw := &safeWriter{w: bufio.NewWriter(file)}
+	writeOutline(sw, out)
 
-	writer := bufio.NewWriter(file)
-	defer writer.Flush()
+	if err := sw.err; err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := sw.w.Flush(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
 
-	fmt.Fprintln(writer, "# Code Structure Outline")
-	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "This file provides an overview of available functions and types per file for LLM context.")
-	fmt.Fprintln(writer, "")
+	fmt.Printf("Code outline written to %s\n", filePath)
+	return nil
+}
+
+func writeOutline(w *safeWriter, out *outline.Outline) {
+	w.Println("# Code Structure Outline")
+	w.Println("")
+	w.Println("This file provides an overview of available functions and types per file for LLM context.")
+	w.Println("")
 
 	// Generate and include mermaid dependency map (single combined diagram)
-	fmt.Fprintln(writer, "## Dependency Map (LLM + Human Context)")
-	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "This diagram combines package-level dependencies and key files into a single readable map.")
-	fmt.Fprintln(writer, "Note: External imports are intentionally omitted here; check go.mod (or module go.mod files in go.work workspaces) for dependencies.")
-	fmt.Fprintln(writer, "")
-	fmt.Fprint(writer, mermaid.GenerateUnifiedDependencyMap(out))
-	fmt.Fprintln(writer, "")
+	w.Println("## Dependency Map (LLM + Human Context)")
+	w.Println("")
+	w.Println("This diagram combines package-level dependencies and key files into a single readable map.")
+	w.Println("Note: External imports are intentionally omitted here; check go.mod (or module go.mod files in go.work workspaces) for dependencies.")
+	w.Println("")
+	w.Print(mermaid.GenerateUnifiedDependencyMap(out))
+	w.Println("")
 
-	writeContracts(writer, out)
+	writeContracts(w, out)
 
 	// Write AI Agent Guidance
-	writeAIAgentGuidance(writer, out)
+	writeAIAgentGuidance(w, out)
 
 	// Write Change Impact Analysis
-	writeChangeImpactAnalysis(writer, out)
+	writeChangeImpactAnalysis(w, out)
 
 	// Write Public API Surface
-	writePublicAPISurface(writer, out)
+	writePublicAPISurface(w, out)
 
 	// Write Reverse Dependencies
-	writeReverseDependencies(writer, out)
+	writeReverseDependencies(w, out)
 
 	// Sort file paths for consistent output
 	var filePaths []string
@@ -171,8 +106,8 @@ func WriteOutlineToFileWithPath(out *outline.Outline, filePath string) error {
 	// Write file-by-file breakdown
 	for _, path := range filePaths {
 		fileInfo := out.Files[path]
-		fmt.Fprintf(writer, "## %s\n", path)
-		fmt.Fprintln(writer, "")
+		w.Printf("## %s\n", path)
+		w.Println("")
 
 		// Functions available in this file
 		if len(fileInfo.Functions) > 0 {
@@ -180,65 +115,62 @@ func WriteOutlineToFileWithPath(out *outline.Outline, filePath string) error {
 			sort.Slice(fileInfo.Functions, func(i, j int) bool {
 				return fileInfo.Functions[i].Name < fileInfo.Functions[j].Name
 			})
-			fmt.Fprintln(writer, "### Functions")
+			w.Println("### Functions")
 			for _, f := range fileInfo.Functions {
 				params := strings.Join(f.Params, ", ")
 				if f.ReturnType != "" {
-					fmt.Fprintf(writer, "- %s(%s) -> %s\n", f.Name, params, f.ReturnType)
+					w.Printf("- %s(%s) -> %s\n", f.Name, params, f.ReturnType)
 				} else {
-					fmt.Fprintf(writer, "- %s(%s)\n", f.Name, params)
+					w.Printf("- %s(%s)\n", f.Name, params)
 				}
 			}
-			fmt.Fprintln(writer, "")
+			w.Println("")
 		}
 
 		// Types/Structs/Classes available in this file
 		if len(fileInfo.Types) > 0 {
 			sort.Strings(fileInfo.Types)
-			fmt.Fprintln(writer, "### Types")
+			w.Println("### Types")
 			for _, t := range fileInfo.Types {
-				fmt.Fprintf(writer, "- %s", t)
+				w.Printf("- %s", t)
 				if ti, exists := out.Types[t]; exists {
 					if len(ti.Methods) > 0 {
-						fmt.Fprintf(writer, " (methods: %s)", strings.Join(ti.Methods, ", "))
+						w.Printf(" (methods: %s)", strings.Join(ti.Methods, ", "))
 					}
 					if len(ti.Fields) > 0 {
-						fmt.Fprintf(writer, " (fields: %s)", strings.Join(ti.Fields, ", "))
+						w.Printf(" (fields: %s)", strings.Join(ti.Fields, ", "))
 					}
 					if len(ti.ContractKeys) > 0 {
-						fmt.Fprintf(writer, " (contracts: %s)", strings.Join(ti.ContractKeys, ", "))
+						w.Printf(" (contracts: %s)", strings.Join(ti.ContractKeys, ", "))
 					}
 				}
-				fmt.Fprintln(writer, "")
+				w.Println("")
 			}
-			fmt.Fprintln(writer, "")
+			w.Println("")
 		}
 
 		// Routes extracted from this file (best-effort).
 		if len(fileInfo.Routes) > 0 {
 			sort.Strings(fileInfo.Routes)
-			fmt.Fprintln(writer, "### Routes")
+			w.Println("### Routes")
 			for _, r := range fileInfo.Routes {
-				fmt.Fprintf(writer, "- %s\n", r)
+				w.Printf("- %s\n", r)
 			}
-			fmt.Fprintln(writer, "")
+			w.Println("")
 		}
 
-		fmt.Fprintln(writer, "---")
-		fmt.Fprintln(writer, "")
+		w.Println("---")
+		w.Println("")
 	}
-
-	fmt.Printf("Code outline written to %s\n", filePath)
-	return nil
 }
 
-func writeContracts(writer *bufio.Writer, out *outline.Outline) {
-	fmt.Fprintln(writer, "## Contracts (LLM Context)")
-	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "These are extracted contract surfaces (best-effort) that commonly cause breakage when changed:")
-	fmt.Fprintln(writer, "- Struct tags (json/query/form/header/etc) are treated as API/DTO contracts")
-	fmt.Fprintln(writer, "- Router-style call sites with string paths are treated as route contracts")
-	fmt.Fprintln(writer, "")
+func writeContracts(writer *safeWriter, out *outline.Outline) {
+	writer.Println("## Contracts (LLM Context)")
+	writer.Println("")
+	writer.Println("These are extracted contract surfaces (best-effort) that commonly cause breakage when changed:")
+	writer.Println("- Struct tags (json/query/form/header/etc) are treated as API/DTO contracts")
+	writer.Println("- Router-style call sites with string paths are treated as route contracts")
+	writer.Println("")
 
 	// Tagged structs / DTO-like contracts.
 	var contractTypes []string
@@ -251,25 +183,25 @@ func writeContracts(writer *bufio.Writer, out *outline.Outline) {
 	sort.Strings(contractTypes)
 
 	if len(contractTypes) > 0 {
-		fmt.Fprintln(writer, "### Tagged Structs")
+		writer.Println("### Tagged Structs")
 		for _, name := range contractTypes {
 			ti := out.Types[name]
 			keys := append([]string(nil), ti.ContractKeys...)
 			sort.Strings(keys)
-			fmt.Fprintf(writer, "- %s (keys: %s)", name, strings.Join(keys, ", "))
+			writer.Printf("- %s (keys: %s)", name, strings.Join(keys, ", "))
 
 			usedBy := out.TypeUsage[name]
 			if len(usedBy) > 0 {
 				sort.Strings(usedBy)
 				if len(usedBy) > 10 {
-					fmt.Fprintf(writer, " (used by: %s, ... +%d more)", strings.Join(usedBy[:10], ", "), len(usedBy)-10)
+					writer.Printf(" (used by: %s, ... +%d more)", strings.Join(usedBy[:10], ", "), len(usedBy)-10)
 				} else {
-					fmt.Fprintf(writer, " (used by: %s)", strings.Join(usedBy, ", "))
+					writer.Printf(" (used by: %s)", strings.Join(usedBy, ", "))
 				}
 			}
-			fmt.Fprintln(writer, "")
+			writer.Println("")
 		}
-		fmt.Fprintln(writer, "")
+		writer.Println("")
 	}
 
 	// Route strings (best-effort).
@@ -282,34 +214,34 @@ func writeContracts(writer *bufio.Writer, out *outline.Outline) {
 	sort.Strings(routeFiles)
 
 	if len(routeFiles) > 0 {
-		fmt.Fprintln(writer, "### Routes")
+		writer.Println("### Routes")
 		for _, path := range routeFiles {
 			fi := out.Files[path]
 			routes := append([]string(nil), fi.Routes...)
 			sort.Strings(routes)
-			fmt.Fprintf(writer, "- %s: %s\n", path, strings.Join(routes, ", "))
+			writer.Printf("- %s: %s\n", path, strings.Join(routes, ", "))
 		}
-		fmt.Fprintln(writer, "")
+		writer.Println("")
 	}
 }
 
 // writeAIAgentGuidance writes AI agent specific guidance
-func writeAIAgentGuidance(writer *bufio.Writer, out *outline.Outline) {
-	fmt.Fprintln(writer, "## AI Agent Guidelines")
-	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "### Safe to modify:")
-	fmt.Fprintln(writer, "- Add new functions to existing files")
-	fmt.Fprintln(writer, "- Modify function implementations (check dependents first)")
-	fmt.Fprintln(writer, "- Add new types that don't break existing interfaces")
-	fmt.Fprintln(writer, "")
+func writeAIAgentGuidance(writer *safeWriter, out *outline.Outline) {
+	writer.Println("## AI Agent Guidelines")
+	writer.Println("")
+	writer.Println("### Safe to modify:")
+	writer.Println("- Add new functions to existing files")
+	writer.Println("- Modify function implementations (check dependents first)")
+	writer.Println("- Add new types that don't break existing interfaces")
+	writer.Println("")
 
-	fmt.Fprintln(writer, "### Requires careful analysis:")
-	fmt.Fprintln(writer, "- Changing function signatures (check all callers)")
-	fmt.Fprintln(writer, "- Modifying type definitions (check all usage)")
-	fmt.Fprintln(writer, "- Adding new dependencies (check for circular deps)")
-	fmt.Fprintln(writer, "")
+	writer.Println("### Requires careful analysis:")
+	writer.Println("- Changing function signatures (check all callers)")
+	writer.Println("- Modifying type definitions (check all usage)")
+	writer.Println("- Adding new dependencies (check for circular deps)")
+	writer.Println("")
 
-	fmt.Fprintln(writer, "### High-risk changes:")
+	writer.Println("### High-risk changes:")
 	// Find core types with many dependents
 	var highRiskTypes []string
 	for typeName, usages := range out.TypeUsage {
@@ -319,17 +251,17 @@ func writeAIAgentGuidance(writer *bufio.Writer, out *outline.Outline) {
 	}
 	if len(highRiskTypes) > 0 {
 		sort.Strings(highRiskTypes)
-		fmt.Fprintf(writer, "- Modifying core types: %s\n", strings.Join(highRiskTypes, ", "))
+		writer.Printf("- Modifying core types: %s\n", strings.Join(highRiskTypes, ", "))
 	}
-	fmt.Fprintln(writer, "- Changing package structure")
-	fmt.Fprintln(writer, "- Removing public APIs")
-	fmt.Fprintln(writer, "")
+	writer.Println("- Changing package structure")
+	writer.Println("- Removing public APIs")
+	writer.Println("")
 }
 
 // writeChangeImpactAnalysis writes change impact analysis
-func writeChangeImpactAnalysis(writer *bufio.Writer, out *outline.Outline) {
-	fmt.Fprintln(writer, "## Change Impact Analysis")
-	fmt.Fprintln(writer, "")
+func writeChangeImpactAnalysis(writer *safeWriter, out *outline.Outline) {
+	writer.Println("## Change Impact Analysis")
+	writer.Println("")
 
 	// Calculate impact for all files
 	var filePaths []string
@@ -342,7 +274,6 @@ func writeChangeImpactAnalysis(writer *bufio.Writer, out *outline.Outline) {
 	// Group by risk level
 	highRisk := []string{}
 	mediumRisk := []string{}
-	lowRisk := []string{}
 
 	for _, path := range filePaths {
 		if impact, exists := out.ChangeImpact[path]; exists {
@@ -351,30 +282,28 @@ func writeChangeImpactAnalysis(writer *bufio.Writer, out *outline.Outline) {
 				highRisk = append(highRisk, path)
 			case "medium":
 				mediumRisk = append(mediumRisk, path)
-			default:
-				lowRisk = append(lowRisk, path)
 			}
 		}
 	}
 
 	if len(highRisk) > 0 {
-		fmt.Fprintln(writer, "### High-Risk Files (many dependents):")
+		writer.Println("### High-Risk Files (many dependents):")
 		for _, path := range highRisk {
 			impact := out.ChangeImpact[path]
-			fmt.Fprintf(writer, "- **%s**: %d direct + %d indirect dependents\n",
+			writer.Printf("- **%s**: %d direct + %d indirect dependents\n",
 				path, len(impact.DirectDependents), len(impact.IndirectDependents))
 		}
-		fmt.Fprintln(writer, "")
+		writer.Println("")
 	}
 
 	if len(mediumRisk) > 0 {
-		fmt.Fprintln(writer, "### Medium-Risk Files:")
+		writer.Println("### Medium-Risk Files:")
 		for _, path := range mediumRisk {
 			impact := out.ChangeImpact[path]
-			fmt.Fprintf(writer, "- **%s**: %d direct + %d indirect dependents\n",
+			writer.Printf("- **%s**: %d direct + %d indirect dependents\n",
 				path, len(impact.DirectDependents), len(impact.IndirectDependents))
 		}
-		fmt.Fprintln(writer, "")
+		writer.Println("")
 	}
 
 	// Go package-level impact (more stable for Go repos).
@@ -410,35 +339,35 @@ func writeChangeImpactAnalysis(writer *bufio.Writer, out *outline.Outline) {
 		}
 
 		if len(pkgHighRisk) > 0 || len(pkgMediumRisk) > 0 {
-			fmt.Fprintln(writer, "### Go Package Risk (directory-level):")
+			writer.Println("### Go Package Risk (directory-level):")
 			if len(pkgHighRisk) > 0 {
-				fmt.Fprintln(writer, "#### High-Risk Packages (many dependents):")
+				writer.Println("#### High-Risk Packages (many dependents):")
 				for _, pkg := range pkgHighRisk {
 					impact := out.PackageImpact[pkg]
-					fmt.Fprintf(writer, "- **%s**: %d direct + %d indirect dependent packages\n",
+					writer.Printf("- **%s**: %d direct + %d indirect dependent packages\n",
 						pkg, len(impact.DirectDependents), len(impact.IndirectDependents))
 				}
-				fmt.Fprintln(writer, "")
+				writer.Println("")
 			}
 			if len(pkgMediumRisk) > 0 {
-				fmt.Fprintln(writer, "#### Medium-Risk Packages:")
+				writer.Println("#### Medium-Risk Packages:")
 				for _, pkg := range pkgMediumRisk {
 					impact := out.PackageImpact[pkg]
-					fmt.Fprintf(writer, "- **%s**: %d direct + %d indirect dependent packages\n",
+					writer.Printf("- **%s**: %d direct + %d indirect dependent packages\n",
 						pkg, len(impact.DirectDependents), len(impact.IndirectDependents))
 				}
-				fmt.Fprintln(writer, "")
+				writer.Println("")
 			}
 		}
 	}
 }
 
 // writePublicAPISurface writes public API information
-func writePublicAPISurface(writer *bufio.Writer, out *outline.Outline) {
-	fmt.Fprintln(writer, "## Public API Surface")
-	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "These are the public functions and types that can be safely used by other files:")
-	fmt.Fprintln(writer, "")
+func writePublicAPISurface(writer *safeWriter, out *outline.Outline) {
+	writer.Println("## Public API Surface")
+	writer.Println("")
+	writer.Println("These are the public functions and types that can be safely used by other files:")
+	writer.Println("")
 
 	var filePaths []string
 	for path := range out.PublicAPIs {
@@ -451,22 +380,22 @@ func writePublicAPISurface(writer *bufio.Writer, out *outline.Outline) {
 	for _, path := range filePaths {
 		apis := out.PublicAPIs[path]
 		if len(apis) > 0 {
-			fmt.Fprintf(writer, "### %s\n", path)
+			writer.Printf("### %s\n", path)
 			sort.Strings(apis)
 			for _, api := range apis {
-				fmt.Fprintf(writer, "- %s\n", api)
+				writer.Printf("- %s\n", api)
 			}
-			fmt.Fprintln(writer, "")
+			writer.Println("")
 		}
 	}
 }
 
 // writeReverseDependencies writes reverse dependency information
-func writeReverseDependencies(writer *bufio.Writer, out *outline.Outline) {
-	fmt.Fprintln(writer, "## Reverse Dependencies")
-	fmt.Fprintln(writer, "")
-	fmt.Fprintln(writer, "Files that depend on each file (useful for understanding change impact):")
-	fmt.Fprintln(writer, "")
+func writeReverseDependencies(writer *safeWriter, out *outline.Outline) {
+	writer.Println("## Reverse Dependencies")
+	writer.Println("")
+	writer.Println("Files that depend on each file (useful for understanding change impact):")
+	writer.Println("")
 
 	var filePaths []string
 	for path := range out.ReverseDeps {
@@ -479,12 +408,12 @@ func writeReverseDependencies(writer *bufio.Writer, out *outline.Outline) {
 	for _, path := range filePaths {
 		deps := out.ReverseDeps[path]
 		if len(deps) > 0 {
-			fmt.Fprintf(writer, "### %s is used by:\n", path)
+			writer.Printf("### %s is used by:\n", path)
 			sort.Strings(deps)
 			for _, dep := range deps {
-				fmt.Fprintf(writer, "- %s\n", dep)
+				writer.Printf("- %s\n", dep)
 			}
-			fmt.Fprintln(writer, "")
+			writer.Println("")
 		}
 	}
 }

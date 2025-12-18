@@ -3,6 +3,7 @@ package mermaid
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -150,16 +151,51 @@ func GenerateArchitectureOverview(out *outline.Outline) string {
 	sb.WriteString("```mermaid\n")
 	sb.WriteString("graph TB\n")
 
-	// Group files by directory
-	dirGroups := make(map[string][]string)
+	sanitizeID := func(s string) string {
+		s = strings.TrimSpace(s)
+		s = strings.NewReplacer(
+			"/", "_",
+			"-", "_",
+			".", "_",
+			" ", "_",
+			"(", "",
+			")", "",
+		).Replace(s)
+		if s == "" {
+			return "x"
+		}
+		if s[0] >= '0' && s[0] <= '9' {
+			return "d" + s
+		}
+		return s
+	}
+
+	fileLabelWithinPrefix := func(filePath, prefix string) string {
+		filePath = filepath.ToSlash(filePath)
+		prefix = filepath.ToSlash(prefix)
+		if prefix != "" && strings.HasPrefix(filePath, prefix) {
+			if trimmed, ok := strings.CutPrefix(filePath, prefix); ok {
+				return trimmed
+			}
+		}
+		return getShortFileName(filePath)
+	}
+
+	// Group files by top-level folder:
+	// - root (files at repo root)
+	// - internal (then nested by internal/<child>)
+	// - everything else grouped by its top-level folder
+	topGroups := make(map[string][]string)
 	externalDeps := make(map[string]bool)
 
 	for filePath := range out.Files {
-		dir := filepath.Dir(filePath)
-		if dir == "." {
-			dir = "root"
+		slashPath := filepath.ToSlash(filePath)
+		parts := strings.Split(slashPath, "/")
+		top := "root"
+		if len(parts) > 1 {
+			top = parts[0]
 		}
-		dirGroups[dir] = append(dirGroups[dir], filePath)
+		topGroups[top] = append(topGroups[top], filePath)
 
 		// Collect external dependencies
 		fileInfo := out.Files[filePath]
@@ -174,26 +210,82 @@ func GenerateArchitectureOverview(out *outline.Outline) string {
 	nodeCounter := 0
 	fileToNode := make(map[string]string)
 
-	// Sort directories for consistent output
-	var sortedDirs []string
-	for dir := range dirGroups {
-		sortedDirs = append(sortedDirs, dir)
+	// Sort top-level groups for consistent output (root first if present).
+	var sortedTops []string
+	for top := range topGroups {
+		sortedTops = append(sortedTops, top)
 	}
-	sort.Strings(sortedDirs)
+	sort.Strings(sortedTops)
+	if i := slices.Index(sortedTops, "root"); i > 0 {
+		sortedTops[0], sortedTops[i] = sortedTops[i], sortedTops[0]
+	}
 
-	for _, dir := range sortedDirs {
-		files := dirGroups[dir]
+	for _, top := range sortedTops {
+		files := topGroups[top]
 		sort.Strings(files)
 
-		dirName := strings.ReplaceAll(dir, "/", "_")
-		sb.WriteString(fmt.Sprintf("    subgraph %s [\"%s\"]\n", dirName, dir))
+		topID := "top_" + sanitizeID(top)
+		topLabel := "/" + top
+		if top == "root" {
+			topLabel = "/root"
+		}
+		sb.WriteString(fmt.Sprintf("    subgraph %s [\"%s\"]\n", topID, topLabel))
 
-		for _, filePath := range files {
-			nodeId := fmt.Sprintf("N%d", nodeCounter)
-			shortName := getShortFileName(filePath)
-			fileToNode[filePath] = nodeId
-			sb.WriteString(fmt.Sprintf("        %s[\"%s\"]\n", nodeId, shortName))
-			nodeCounter++
+		if top == "internal" {
+			childGroups := make(map[string][]string)
+			for _, filePath := range files {
+				slashPath := filepath.ToSlash(filePath)
+				parts := strings.Split(slashPath, "/")
+				child := "(files)"
+				if len(parts) >= 3 {
+					child = parts[1]
+				}
+				childGroups[child] = append(childGroups[child], filePath)
+			}
+
+			var sortedChildren []string
+			for child := range childGroups {
+				sortedChildren = append(sortedChildren, child)
+			}
+			sort.Strings(sortedChildren)
+			if i := slices.Index(sortedChildren, "(files)"); i >= 0 && i != len(sortedChildren)-1 {
+				sortedChildren = append(append(sortedChildren[:i], sortedChildren[i+1:]...), "(files)")
+			}
+
+			for _, child := range sortedChildren {
+				childID := topID + "_" + sanitizeID(child)
+				childLabel := child
+				childPrefix := "internal/"
+				if child == "(files)" {
+					childLabel = "files"
+				} else {
+					childPrefix = "internal/" + child + "/"
+				}
+
+				sb.WriteString(fmt.Sprintf("        subgraph %s [\"%s\"]\n", childID, childLabel))
+				childFiles := childGroups[child]
+				sort.Strings(childFiles)
+				for _, filePath := range childFiles {
+					nodeId := fmt.Sprintf("N%d", nodeCounter)
+					label := fileLabelWithinPrefix(filePath, childPrefix)
+					fileToNode[filePath] = nodeId
+					sb.WriteString(fmt.Sprintf("            %s[\"%s\"]\n", nodeId, label))
+					nodeCounter++
+				}
+				sb.WriteString("        end\n")
+			}
+		} else {
+			prefix := top + "/"
+			if top == "root" {
+				prefix = ""
+			}
+			for _, filePath := range files {
+				nodeId := fmt.Sprintf("N%d", nodeCounter)
+				label := fileLabelWithinPrefix(filePath, prefix)
+				fileToNode[filePath] = nodeId
+				sb.WriteString(fmt.Sprintf("        %s[\"%s\"]\n", nodeId, label))
+				nodeCounter++
+			}
 		}
 
 		sb.WriteString("    end\n\n")
@@ -338,7 +430,10 @@ func GenerateUnifiedDependencyMap(out *outline.Outline) string {
 
 		// Add public API files in this package.
 		for filePath := range out.PublicAPIs {
-			if !strings.HasPrefix(filepath.ToSlash(filePath), filepath.ToSlash(pkg)+"/") && !(pkg == "." && !strings.Contains(filePath, "/")) {
+			slashFile := filepath.ToSlash(filePath)
+			slashPkg := filepath.ToSlash(pkg)
+			inPkg := strings.HasPrefix(slashFile, slashPkg+"/") || (pkg == "." && !strings.Contains(slashFile, "/"))
+			if !inPkg {
 				continue
 			}
 			files = append(files, filePath)
@@ -490,10 +585,8 @@ func getDependencyStrength(out *outline.Outline, from, to string) string {
 	}
 
 	// For other languages, treat an explicit resolved file dependency as medium.
-	for _, dep := range fromFile.LocalDeps {
-		if dep == to {
-			return "medium"
-		}
+	if slices.Contains(fromFile.LocalDeps, to) {
+		return "medium"
 	}
 	return "weak"
 }

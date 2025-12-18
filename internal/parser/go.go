@@ -7,6 +7,7 @@ import (
 	"log"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/jasonwillschiu/codebrev/internal/outline"
@@ -201,10 +202,8 @@ func resolveLocalGoImport(out *outline.Outline, importPath string) (string, bool
 }
 
 func appendUniqueString(dst *[]string, value string) {
-	for _, existing := range *dst {
-		if existing == value {
-			return
-		}
+	if slices.Contains(*dst, value) {
+		return
 	}
 	*dst = append(*dst, value)
 }

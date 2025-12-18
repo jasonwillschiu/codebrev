@@ -197,6 +197,7 @@ graph TB
 ### Reliability Features
 - **Cross-Language Consistency**: Unified output format regardless of source language
 - **Duplicate Prevention**: Smart deduplication across files and within files
+- **Safe Writing**: Robust I/O handling via `safeWriter` pattern
 - **Memory Efficiency**: Streaming processing for large codebases
 - **Error Recovery**: Continues processing even when individual constructs fail to parse
 - **Cache Management**: Intelligent caching with regeneration when needed

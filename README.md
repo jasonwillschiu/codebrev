@@ -17,7 +17,7 @@ codebrev creates comprehensive code summaries (`codebrev.md`) that help AI assis
 - **Multi-Language Support**: Go, JavaScript, TypeScript, and more
 - **Dependency Analysis**: Tracks local file/package relationships and change impact
 - **Go Package Analysis**: Package-level dependency graphs with coupling signals (imports, calls, type uses)
-- **Visual Diagrams**: A single Mermaid dependency map (package anchors + key files); external deps are intentionally omitted (see `go.mod`)
+- **Visual Diagrams**: Improved Mermaid dependency map and architecture overview with top-level grouping; external deps are intentionally omitted (see `go.mod`)
 - **Change Impact Analysis**: Identifies affected functions, files, and packages when making changes
 - **AI-Optimized Output**: Structured for LLM consumption with clear signatures and types
 

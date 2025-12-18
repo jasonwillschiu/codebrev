@@ -1,3 +1,10 @@
+# 0.10.0 - Update: Improved diagram grouping and writer safety
+- Improved Architecture Overview diagram with top-level directory grouping
+- Refactored markdown writer using `safeWriter` pattern for better error handling
+- Added `WriteOutlineToFileWithPath` for configurable output paths
+- Cleanup: removed deprecated `binary-mapping.json`
+- Optimized gitignore and parser logic using modern Go features
+
 # 0.9.0 - BREAKING: Remove MCP server and Astro parsing
 - Removed MCP (Model Context Protocol) server mode
 - Now CLI-only tool (no more `--mcp` flag)
