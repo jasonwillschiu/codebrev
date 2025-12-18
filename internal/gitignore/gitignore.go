@@ -3,6 +3,7 @@ package gitignore
 import (
 	"bufio"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -20,6 +21,15 @@ type Gitignore struct {
 	Root       string
 	GitRoot    string
 	LoadedDirs map[string]bool // Track which directories we've loaded .gitignore from
+}
+
+type normalizedPattern struct {
+	pattern  string
+	negated  bool
+	dirOnly  bool
+	noSlash  bool
+	anchored bool
+	raw      string
 }
 
 // New creates a new Gitignore instance
@@ -64,6 +74,8 @@ func (gi *Gitignore) ShouldIgnore(path string) bool {
 	// Dynamically load .gitignore files from directories we encounter
 	gi.loadGitignoreFromPath(path)
 
+	ignored := false
+
 	for _, patternInfo := range gi.Patterns {
 		// Get the relative path from the pattern's base directory
 		relPath, err := filepath.Rel(patternInfo.BaseDir, path)
@@ -79,12 +91,12 @@ func (gi *Gitignore) ShouldIgnore(path string) bool {
 			continue
 		}
 
-		if gi.matchPattern(relPath, patternInfo.Pattern) {
-			return true
+		if match, negated := gi.matchPattern(relPath, patternInfo.Pattern); match {
+			ignored = !negated
 		}
 	}
 
-	return false
+	return ignored
 }
 
 // findGitRoot walks up the directory tree to find the git repository root
@@ -98,7 +110,7 @@ func findGitRoot(startPath string) string {
 	currentPath := absPath
 	for {
 		gitPath := filepath.Join(currentPath, ".git")
-		if info, err := os.Stat(gitPath); err == nil && info.IsDir() {
+		if info, err := os.Stat(gitPath); err == nil && (info.IsDir() || info.Mode().IsRegular()) {
 			return currentPath
 		}
 
@@ -178,63 +190,198 @@ func (gi *Gitignore) loadGitignoreFromPath(path string) {
 		dir = filepath.Dir(path)
 	}
 
-	// Walk up the directory tree from this path to the git root, loading any .gitignore files we haven't seen yet
+	// Load in gitignore order: git root -> ... -> current directory.
+	dirsToLoad := []string{}
 	currentDir := dir
-	for !gi.LoadedDirs[currentDir] {
-		// Mark this directory as loaded
-		gi.LoadedDirs[currentDir] = true
-
-		// Try to load .gitignore from this directory
-		gitignorePath := filepath.Join(currentDir, ".gitignore")
-		gi.loadGitignoreFile(gitignorePath)
-
-		// Stop if we've reached the git root or filesystem root
+	for {
+		dirsToLoad = append(dirsToLoad, currentDir)
+		if currentDir == gi.GitRoot {
+			break
+		}
 		parentDir := filepath.Dir(currentDir)
-		if parentDir == currentDir || currentDir == gi.GitRoot {
+		if parentDir == currentDir {
 			break
 		}
 		currentDir = parentDir
 	}
+	for i := len(dirsToLoad) - 1; i >= 0; i-- {
+		d := dirsToLoad[i]
+		if gi.LoadedDirs[d] {
+			continue
+		}
+		gi.loadGitignoreFile(filepath.Join(d, ".gitignore"))
+		gi.LoadedDirs[d] = true
+	}
 }
 
-// matchPattern checks if a path matches a gitignore pattern
-func (gi *Gitignore) matchPattern(path, pattern string) bool {
-	// Normalize pattern
-	pattern = filepath.ToSlash(pattern)
-
-	// Handle directory patterns (ending with /)
-	if trimmed, ok := strings.CutSuffix(pattern, "/"); ok {
-		pattern = trimmed
-		// Check if path starts with the pattern (for directories)
-		return strings.HasPrefix(path, pattern+"/") || path == pattern
+func normalizeGitignorePattern(raw string) (normalizedPattern, bool) {
+	p := strings.TrimSpace(filepath.ToSlash(raw))
+	if p == "" {
+		return normalizedPattern{}, false
+	}
+	if strings.HasPrefix(p, "#") {
+		return normalizedPattern{}, false
 	}
 
-	// Handle glob patterns with **
-	if strings.Contains(pattern, "**") {
-		// Convert ** to a regex pattern
-		regexPattern := strings.ReplaceAll(pattern, "**", ".*")
-		regexPattern = strings.ReplaceAll(regexPattern, "*", "[^/]*")
-		regexPattern = "^" + regexPattern + "$"
+	negated := false
+	if strings.HasPrefix(p, "!") && !strings.HasPrefix(p, `\!`) {
+		negated = true
+		p = strings.TrimPrefix(p, "!")
+	}
+	p = strings.TrimPrefix(p, `\!`)
+	p = strings.TrimPrefix(p, `\#`)
 
-		matched, err := regexp.MatchString(regexPattern, path)
-		if err != nil {
-			return false
+	anchored := strings.HasPrefix(p, "/")
+	p = strings.TrimPrefix(p, "/")
+
+	dirOnly := false
+	if trimmed, ok := strings.CutSuffix(p, "/"); ok {
+		dirOnly = true
+		p = trimmed
+	}
+	// Treat "foo/**" as a directory ignore (it should ignore the directory itself too).
+	if strings.HasSuffix(p, "/**") {
+		dirOnly = true
+		p = strings.TrimSuffix(p, "/**")
+		p = strings.TrimSuffix(p, "/")
+	}
+
+	noSlash := !strings.Contains(p, "/")
+
+	return normalizedPattern{
+		pattern:  p,
+		negated:  negated,
+		dirOnly:  dirOnly,
+		noSlash:  noSlash,
+		anchored: anchored,
+		raw:      raw,
+	}, true
+}
+
+func globToRegexFragment(glob string) string {
+	if glob == "" {
+		return ""
+	}
+	var b strings.Builder
+	for i := 0; i < len(glob); i++ {
+		c := glob[i]
+		switch c {
+		case '*':
+			if i+1 < len(glob) && glob[i+1] == '*' {
+				b.WriteString(".*")
+				i++
+				continue
+			}
+			b.WriteString(`[^/]*`)
+		case '?':
+			b.WriteString(`[^/]`)
+		case '[':
+			// Best-effort support for glob character classes.
+			j := i + 1
+			for j < len(glob) && glob[j] != ']' {
+				j++
+			}
+			if j >= len(glob) {
+				b.WriteString(`\[`)
+				continue
+			}
+			content := glob[i+1 : j]
+			if strings.HasPrefix(content, "!") {
+				content = "^" + content[1:]
+			}
+			content = strings.ReplaceAll(content, `\`, `\\`)
+			content = strings.ReplaceAll(content, "]", `\]`)
+			b.WriteByte('[')
+			b.WriteString(content)
+			b.WriteByte(']')
+			i = j
+		default:
+			if strings.ContainsRune(`.+()|{}^$\\`, rune(c)) {
+				b.WriteByte('\\')
+			}
+			b.WriteByte(c)
 		}
-		return matched
+	}
+	return b.String()
+}
+
+func compileGlobToRegex(glob string) *regexp.Regexp {
+	frag := globToRegexFragment(glob)
+	if frag == "" {
+		return nil
+	}
+	re, err := regexp.Compile("^" + frag + "$")
+	if err != nil {
+		return nil
+	}
+	return re
+}
+
+func compileDirGlobToRegex(glob string) *regexp.Regexp {
+	frag := globToRegexFragment(glob)
+	if frag == "" {
+		return nil
+	}
+	re, err := regexp.Compile("^" + frag + `(?:/.*)?$`)
+	if err != nil {
+		return nil
+	}
+	return re
+}
+
+// matchPattern checks if a path matches a gitignore pattern.
+// It returns (matched, negated).
+func (gi *Gitignore) matchPattern(relPath, rawPattern string) (bool, bool) {
+	np, ok := normalizeGitignorePattern(rawPattern)
+	if !ok {
+		return false, false
 	}
 
-	// Handle simple glob patterns with *
-	if strings.Contains(pattern, "*") {
-		regexPattern := strings.ReplaceAll(pattern, "*", "[^/]*")
-		regexPattern = "^" + regexPattern + "$"
-
-		matched, err := regexp.MatchString(regexPattern, path)
-		if err != nil {
-			return false
+	// Patterns without slashes match basenames in any directory.
+	if np.noSlash {
+		nameRE := compileGlobToRegex(np.pattern)
+		if nameRE == nil {
+			return false, np.negated
 		}
-		return matched
+		if np.dirOnly {
+			// Directory ignore should ignore the directory itself and everything under it.
+			parts := strings.Split(relPath, "/")
+			for _, part := range parts {
+				if part == "" || part == "." {
+					continue
+				}
+				if nameRE.MatchString(part) {
+					return true, np.negated
+				}
+			}
+			return false, np.negated
+		}
+
+		base := path.Base(relPath)
+		if base == "." || base == "/" {
+			base = relPath
+		}
+		return nameRE.MatchString(base), np.negated
 	}
 
-	// Exact match or prefix match for directories
-	return path == pattern || strings.HasPrefix(path, pattern+"/")
+	// Patterns with slashes match against the whole path relative to the .gitignore base.
+	pat := np.pattern
+	if np.anchored {
+		// relPath is already relative to base dir; anchored patterns simply match from the start.
+		pat = strings.TrimPrefix(pat, "/")
+	}
+
+	if !np.dirOnly {
+		fullRE := compileGlobToRegex(pat)
+		if fullRE == nil {
+			return false, np.negated
+		}
+		return fullRE.MatchString(relPath), np.negated
+	}
+
+	dirRE := compileDirGlobToRegex(pat)
+	if dirRE == nil {
+		return false, np.negated
+	}
+	return dirRE.MatchString(relPath), np.negated
 }

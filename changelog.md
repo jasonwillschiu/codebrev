@@ -1,3 +1,10 @@
+# 0.12.0 - Update: Robust gitignore pattern matching
+- Rewrote gitignore logic to be fully compliant with Git's specification
+- Added support for negations (`!`), anchored patterns (`/`), and `**` globbing
+- Improved `.gitignore` loading order (root-to-leaf) for correct precedence
+- Enhanced glob-to-regex conversion for better pattern accuracy
+- Added support for `.git` files (submodules/worktrees) in root detection
+
 # 0.11.0 - Update: Nested subgraph grouping for Mermaid diagrams
 - Improved `GenerateUnifiedDependencyMap` with nested subgraphs by top-level directory
 - Cleaner labels in diagrams by removing redundant path prefixes

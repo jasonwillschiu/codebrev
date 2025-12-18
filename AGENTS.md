@@ -77,6 +77,7 @@ codebrev generates structured summaries of codebases specifically designed for L
 
 ### 4. Smart Filtering Applied
 The tool automatically filters out:
+- Gitignored files (respects `.gitignore` hierarchies, including negations and `**`)
 - Test files (`*_test.go`, `*.test.js`, `*.spec.js`)
 - Variables and constants (focus on functions, types, and imports only)
 - Duplicate declarations across files

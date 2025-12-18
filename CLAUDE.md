@@ -132,9 +132,12 @@ codebrev is a CLI tool that analyzes codebases and generates structured summarie
 - Package-level deps are resolved to a "representative file" (lexicographically first) to avoid graph explosion
 
 ### Gitignore Handling
-- `internal/gitignore/gitignore.go` loads `.gitignore` hierarchy
-- Walks up from scan root to git root
-- Patterns are matched with base directory context
+- `internal/gitignore/gitignore.go` implements a robust git-compliant pattern matcher
+- Supports standard glob patterns (`*`, `?`, `[]`), double-star globbing (`**`), negations (`!`), and directory-specific ignores
+- **Loading Order**: Loads `.gitignore` files starting from git root down to the target directory, ensuring proper pattern precedence (later patterns override earlier ones)
+- **Negation Support**: Correctlly handles `!` patterns to un-ignore files/directories
+- **Root Detection**: `findGitRoot` identifies `.git` directories or files (for submodules/worktrees)
+- Patterns are matched relative to the directory where the `.gitignore` file resides
 
 ### Change Impact Analysis
 - Direct dependents: Files that directly import the target

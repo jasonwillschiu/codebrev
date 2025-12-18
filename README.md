@@ -15,6 +15,7 @@ codebrev creates comprehensive code summaries (`codebrev.md`) that help AI assis
 ## Features
 
 - **Multi-Language Support**: Go, JavaScript, TypeScript, and more
+- **Robust Gitignore Support**: Full compliance with Git's ignore rules (negations, `**` globbing, anchored patterns)
 - **Dependency Analysis**: Tracks local file/package relationships and change impact
 - **Go Package Analysis**: Package-level dependency graphs with coupling signals (imports, calls, type uses)
 - **Visual Diagrams**: Improved Mermaid dependency map and architecture overview with top-level grouping; external deps are intentionally omitted (see `go.mod`)
