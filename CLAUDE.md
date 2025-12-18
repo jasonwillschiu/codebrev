@@ -67,7 +67,7 @@ codebrev is a CLI tool that analyzes codebases and generates structured summarie
 
 3. **Mermaid Layer** (`internal/mermaid/`)
    - Generates a single combined diagram:
-     - Dependency map (package anchors + key files) via `GenerateUnifiedDependencyMap()`
+     - Dependency map (package anchors + key files) via `GenerateUnifiedDependencyMap()`. Uses nested subgraphs by top-level directory for clarity.
    - Architecture overview uses top-level directory grouping for better clarity in large projects.
    - External imports are intentionally omitted from the diagram; use `go.mod` (or module `go.mod` files in `go.work` workspaces) to inspect dependencies.
    - Edge weights based on coupling signals:

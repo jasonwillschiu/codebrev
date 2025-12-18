@@ -9,58 +9,51 @@ Note: External imports are intentionally omitted here; check go.mod (or module g
 
 ```mermaid
 graph TB
-    P0["root"]:::lowRisk
-    P1["internal/gitignore"]:::lowRisk
-    P2["internal/mermaid"]:::lowRisk
-    P3["internal/outline"]:::mediumRisk
-    P4["internal/parser"]:::lowRisk
-    P5["internal/writer"]:::lowRisk
-    P6["tools/release-tool"]:::lowRisk
 
-    subgraph pkg_root ["root"]
-        P0
+    subgraph top_root ["root"]
+        P0["root"]:::lowRisk
         F0["main.go"]:::lowRisk
         P0 --> F0
     end
 
-    subgraph pkg_internal_gitignore ["internal/gitignore"]
-        P1
-        F1["gitignore/gitignore.go"]:::lowRisk
-        P1 --> F1
+    subgraph top_internal ["/internal"]
+        subgraph pkg_internal_gitignore ["gitignore"]
+            P1["gitignore"]:::lowRisk
+            F1["gitignore/gitignore.go"]:::lowRisk
+            P1 --> F1
+        end
+        subgraph pkg_internal_mermaid ["mermaid"]
+            P2["mermaid"]:::lowRisk
+            F2["mermaid/generator.go"]:::lowRisk
+            P2 --> F2
+        end
+        subgraph pkg_internal_outline ["outline"]
+            P3["outline"]:::mediumRisk
+            F3["outline/contains.go"]:::highRisk
+            P3 --> F3
+            F4["outline/types.go"]:::lowRisk
+            P3 --> F4
+        end
+        subgraph pkg_internal_parser ["parser"]
+            P4["parser"]:::lowRisk
+            F5["parser/go.go"]:::lowRisk
+            P4 --> F5
+            F6["parser/parser.go"]:::lowRisk
+            P4 --> F6
+        end
+        subgraph pkg_internal_writer ["writer"]
+            P5["writer"]:::lowRisk
+            F7["writer/writer.go"]:::lowRisk
+            P5 --> F7
+        end
     end
 
-    subgraph pkg_internal_mermaid ["internal/mermaid"]
-        P2
-        F2["mermaid/generator.go"]:::lowRisk
-        P2 --> F2
-    end
-
-    subgraph pkg_internal_outline ["internal/outline"]
-        P3
-        F3["outline/contains.go"]:::highRisk
-        P3 --> F3
-        F4["outline/types.go"]:::lowRisk
-        P3 --> F4
-    end
-
-    subgraph pkg_internal_parser ["internal/parser"]
-        P4
-        F5["parser/go.go"]:::lowRisk
-        P4 --> F5
-        F6["parser/parser.go"]:::lowRisk
-        P4 --> F6
-    end
-
-    subgraph pkg_internal_writer ["internal/writer"]
-        P5
-        F7["writer/writer.go"]:::lowRisk
-        P5 --> F7
-    end
-
-    subgraph pkg_tools_release_tool ["tools/release-tool"]
-        P6
-        F8["release-tool/main.go"]:::lowRisk
-        P6 --> F8
+    subgraph top_tools ["/tools"]
+        subgraph pkg_tools_release_tool ["release-tool"]
+            P6["release-tool"]:::lowRisk
+            F8["release-tool/main.go"]:::lowRisk
+            P6 --> F8
+        end
     end
 
     P0 --> P3
@@ -212,6 +205,7 @@ Files that depend on each file (useful for understanding change impact):
 - getPackageDependencyStrength(out *outline.Outline, fromPkg string, toPkg string) -> string
 - getShortFileName(filePath string) -> string
 - isLocalImport(imp string, modulePaths map[string]string) -> bool
+- sanitizeID(s string) -> string
 
 ---
 

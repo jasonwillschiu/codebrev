@@ -1,3 +1,9 @@
+# 0.11.0 - Update: Nested subgraph grouping for Mermaid diagrams
+- Improved `GenerateUnifiedDependencyMap` with nested subgraphs by top-level directory
+- Cleaner labels in diagrams by removing redundant path prefixes
+- Simplified root package visualization by removing unnecessary nesting
+- Exported `sanitizeID` utility for consistent Mermaid node naming
+
 # 0.10.0 - Update: Improved diagram grouping and writer safety
 - Improved Architecture Overview diagram with top-level directory grouping
 - Refactored markdown writer using `safeWriter` pattern for better error handling

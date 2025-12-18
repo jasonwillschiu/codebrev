@@ -143,32 +143,31 @@ func GenerateGoPackageDependencyGraph(out *outline.Outline) string {
 	return sb.String()
 }
 
+func sanitizeID(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.NewReplacer(
+		"/", "_",
+		"-", "_",
+		".", "_",
+		" ", "_",
+		"(", "",
+		")", "",
+	).Replace(s)
+	if s == "" {
+		return "x"
+	}
+	if s[0] >= '0' && s[0] <= '9' {
+		return "d" + s
+	}
+	return s
+}
+
 // GenerateArchitectureOverview creates a human-readable architecture diagram
-// This shows the overall structure with directory groupings and external dependencies
 func GenerateArchitectureOverview(out *outline.Outline) string {
 	var sb strings.Builder
 
 	sb.WriteString("```mermaid\n")
 	sb.WriteString("graph TB\n")
-
-	sanitizeID := func(s string) string {
-		s = strings.TrimSpace(s)
-		s = strings.NewReplacer(
-			"/", "_",
-			"-", "_",
-			".", "_",
-			" ", "_",
-			"(", "",
-			")", "",
-		).Replace(s)
-		if s == "" {
-			return "x"
-		}
-		if s[0] >= '0' && s[0] <= '9' {
-			return "d" + s
-		}
-		return s
-	}
 
 	fileLabelWithinPrefix := func(filePath, prefix string) string {
 		filePath = filepath.ToSlash(filePath)
@@ -398,7 +397,7 @@ func GenerateUnifiedDependencyMap(out *outline.Outline) string {
 	}
 	sort.Strings(pkgs)
 
-	// Build package nodes and choose key files per package.
+	// Build package node mappings and choose key files per package.
 	pkgToNode := make(map[string]string, len(pkgs))
 	keyFiles := make(map[string][]string, len(pkgs)) // pkg -> []filePath
 
@@ -411,15 +410,6 @@ func GenerateUnifiedDependencyMap(out *outline.Outline) string {
 	for i, pkg := range pkgs {
 		nodeID := fmt.Sprintf("P%d", i)
 		pkgToNode[pkg] = nodeID
-
-		impact := out.CalculatePackageChangeImpact(pkg)
-		nodeStyle := getNodeStyle(impact.RiskLevel)
-		label := pkg
-		if label == "." {
-			label = "root"
-		}
-
-		sb.WriteString(fmt.Sprintf("    %s[\"%s\"]%s\n", nodeID, label, nodeStyle))
 
 		// Pick key files (bounded).
 		pkgInfo := out.Packages[pkg]
@@ -466,35 +456,99 @@ func GenerateUnifiedDependencyMap(out *outline.Outline) string {
 		keyFiles[pkg] = unique
 	}
 
-	// Create file nodes for selected key files.
+	// Create file nodes and organize packages into subgraphs by top-level directory.
 	fileToNode := make(map[string]string)
 	fileCounter := 0
+
+	// Group packages by top-level directory.
+	topToPkgs := make(map[string][]string)
 	for _, pkg := range pkgs {
-		files := keyFiles[pkg]
-		if len(files) == 0 {
-			continue
+		top := "root"
+		parts := strings.Split(filepath.ToSlash(pkg), "/")
+		if pkg != "." && pkg != "" && len(parts) > 0 {
+			top = parts[0]
+		}
+		topToPkgs[top] = append(topToPkgs[top], pkg)
+	}
+
+	// Sort top-level groups for consistent output (root first if present).
+	var sortedTops []string
+	for top := range topToPkgs {
+		sortedTops = append(sortedTops, top)
+	}
+	sort.Strings(sortedTops)
+	if i := slices.Index(sortedTops, "root"); i > 0 {
+		sortedTops[0], sortedTops[i] = sortedTops[i], sortedTops[0]
+	}
+
+	for _, top := range sortedTops {
+		topID := "top_" + sanitizeID(top)
+		topLabel := "/" + top
+		if top == "root" {
+			topLabel = "root"
 		}
 
-		subgraphName := "pkg_" + strings.NewReplacer("/", "_", "-", "_", ".", "root").Replace(pkg)
-		label := pkg
-		if label == "." {
-			label = "root"
-		}
-		sb.WriteString(fmt.Sprintf("\n    subgraph %s [\"%s\"]\n", subgraphName, label))
-		sb.WriteString(fmt.Sprintf("        %s\n", pkgToNode[pkg]))
+		sb.WriteString(fmt.Sprintf("\n    subgraph %s [\"%s\"]\n", topID, topLabel))
 
-		for _, filePath := range files {
-			nodeID := fmt.Sprintf("F%d", fileCounter)
-			fileCounter++
-			fileToNode[filePath] = nodeID
-
-			impact := out.CalculateChangeImpact(filePath)
+		for _, pkg := range topToPkgs[top] {
+			nodeID := pkgToNode[pkg]
+			impact := out.CalculatePackageChangeImpact(pkg)
 			nodeStyle := getNodeStyle(impact.RiskLevel)
-			label := disambiguatedFileLabel(filePath, baseCount)
-			sb.WriteString(fmt.Sprintf("        %s[\"%s\"]%s\n", nodeID, label, nodeStyle))
 
-			// Connect package anchor to key file for discoverability.
-			sb.WriteString(fmt.Sprintf("        %s --> %s\n", pkgToNode[pkg], nodeID))
+			// Package node label
+			pkgLabel := pkg
+			if pkgLabel == "." {
+				pkgLabel = "root"
+			} else if pkg != top && strings.HasPrefix(pkg, top+"/") {
+				pkgLabel = strings.TrimPrefix(pkg, top+"/")
+			}
+
+			files := keyFiles[pkg]
+			// Simplify: If the package is the same as the top-level folder, don't create a nested subgraph.
+			isTopPackage := pkg == top || (top == "root" && pkg == ".")
+
+			if (len(files) == 0 && pkg != ".") || isTopPackage {
+				// Just the package anchor node (and files if any) in the top-level subgraph
+				sb.WriteString(fmt.Sprintf("        %s[\"%s\"]%s\n", nodeID, pkgLabel, nodeStyle))
+				for _, filePath := range files {
+					fileID := fmt.Sprintf("F%d", fileCounter)
+					fileCounter++
+					fileToNode[filePath] = fileID
+
+					fileImpact := out.CalculateChangeImpact(filePath)
+					fileStyle := getNodeStyle(fileImpact.RiskLevel)
+					fileLabel := disambiguatedFileLabel(filePath, baseCount)
+					sb.WriteString(fmt.Sprintf("        %s[\"%s\"]%s\n", fileID, fileLabel, fileStyle))
+					sb.WriteString(fmt.Sprintf("        %s --> %s\n", nodeID, fileID))
+				}
+				continue
+			}
+
+			subgraphName := "pkg_" + sanitizeID(pkg)
+			displayLabel := pkg
+			if pkg == "." {
+				displayLabel = "root"
+			} else if pkg != top && strings.HasPrefix(pkg, top+"/") {
+				displayLabel = strings.TrimPrefix(pkg, top+"/")
+			}
+
+			sb.WriteString(fmt.Sprintf("        subgraph %s [\"%s\"]\n", subgraphName, displayLabel))
+			sb.WriteString(fmt.Sprintf("            %s[\"%s\"]%s\n", nodeID, pkgLabel, nodeStyle))
+
+			for _, filePath := range files {
+				fileID := fmt.Sprintf("F%d", fileCounter)
+				fileCounter++
+				fileToNode[filePath] = fileID
+
+				fileImpact := out.CalculateChangeImpact(filePath)
+				fileStyle := getNodeStyle(fileImpact.RiskLevel)
+				fileLabel := disambiguatedFileLabel(filePath, baseCount)
+				sb.WriteString(fmt.Sprintf("            %s[\"%s\"]%s\n", fileID, fileLabel, fileStyle))
+
+				// Connect package anchor to key file for discoverability.
+				sb.WriteString(fmt.Sprintf("            %s --> %s\n", nodeID, fileID))
+			}
+			sb.WriteString("        end\n")
 		}
 		sb.WriteString("    end\n")
 	}
